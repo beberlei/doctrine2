@@ -1237,4 +1237,22 @@ class QueryBuilderTest extends OrmTestCase
         self::assertSame(3, $builder->getParameter('0')->getValue());
         self::assertSame('Doctrine', $builder->getParameter('name')->getValue());
     }
+
+    /**
+     * @group GH-8595
+     */
+    public function testAndOrInsideWhereIsEncapsulate()
+    {
+        $searchitem = '';
+        $builder = $this->entityManager->createQueryBuilder()
+            ->select('u')
+            ->from(CmsUser::class, 'u')
+            ->andWhere('u.status = \'active\'')
+            ->andWhere('u.username like ?1 or u.name like ?1')
+            ->setParameter(1, '%' . $searchitem . '%')
+        ;
+
+        $this->assertEquals("SELECT u FROM Doctrine\Tests\Models\CMS\CmsUser u WHERE u.status = 'active' AND (u.username like ?1 or u.name like ?1)", $builder->getDQL());
+        $this->assertEquals("SELECT c0_.id AS id_0, c0_.status AS status_1, c0_.username AS username_2, c0_.name AS name_3, c0_.email_id AS email_id_4 FROM cms_users c0_ WHERE c0_.status = 'active' AND (c0_.username LIKE ? OR c0_.name LIKE ?)", $builder->getQuery()->getSQL());
+    }
 }
