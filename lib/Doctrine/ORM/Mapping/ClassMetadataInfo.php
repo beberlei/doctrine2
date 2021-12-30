@@ -77,6 +77,7 @@ use const PHP_VERSION_ID;
  *      length?: int,
  *      id?: bool,
  *      nullable?: bool,
+ *      enumType?: class-string,
  *      columnDefinition?: string,
  *      precision?: int,
  *      scale?: int,
@@ -1025,6 +1026,13 @@ class ClassMetadataInfo implements ClassMetadata
             $this->reflFields[$field] = isset($mapping['declared'])
                 ? $reflService->getAccessibleProperty($mapping['declared'], $field)
                 : $reflService->getAccessibleProperty($this->name, $field);
+
+            if (isset($mapping['enumType'])) {
+                $this->reflFields[$field] = new ReflectionEnumProperty(
+                    $this->reflFields[$field],
+                    $mapping['enumType']
+                );
+            }
         }
 
         foreach ($this->associationMappings as $field => $mapping) {

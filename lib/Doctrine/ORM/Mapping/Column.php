@@ -44,6 +44,9 @@ final class Column implements Annotation
     /** @var bool */
     public $nullable = false;
 
+    /** @var class-string<\Enum>|null */
+    public $enumType = null;
+
     /** @var array<string,mixed> */
     public $options = [];
 
@@ -61,6 +64,7 @@ final class Column implements Annotation
         ?int $scale = null,
         bool $unique = false,
         bool $nullable = false,
+        ?string $enumType = null,
         array $options = [],
         ?string $columnDefinition = null
     ) {
@@ -71,6 +75,7 @@ final class Column implements Annotation
         $this->scale            = $scale;
         $this->unique           = $unique;
         $this->nullable         = $nullable;
+        $this->enumType         = $enumType;
         $this->options          = $options;
         $this->columnDefinition = $columnDefinition;
     }

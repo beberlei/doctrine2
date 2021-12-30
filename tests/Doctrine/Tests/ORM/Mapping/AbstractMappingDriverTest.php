@@ -64,6 +64,8 @@ use Doctrine\Tests\Models\DDC889\DDC889Class;
 use Doctrine\Tests\Models\DDC889\DDC889Entity;
 use Doctrine\Tests\Models\DDC964\DDC964Admin;
 use Doctrine\Tests\Models\DDC964\DDC964Guest;
+use Doctrine\Tests\Models\Enums\Card;
+use Doctrine\Tests\Models\Enums\Suit;
 use Doctrine\Tests\Models\TypedProperties\Contact;
 use Doctrine\Tests\Models\TypedProperties\UserTyped;
 use Doctrine\Tests\OrmTestCase;
@@ -1141,6 +1143,17 @@ abstract class AbstractMappingDriverTest extends OrmTestCase
         $metadata = $this->createClassMetadata(ReservedWordInTableColumn::class);
 
         self::assertSame('count', $metadata->getFieldMapping('count')['columnName']);
+    }
+
+    public function testEnumType(): void
+    {
+        if (PHP_VERSION_ID < 80100) {
+            $this->markTestSkipped('Only PHP 8.1+ supports enums.');
+        }
+
+        $metadata = $this->createClassMetadata(Card::class);
+
+        self::assertEquals(Suit::class, $metadata->fieldMappings['suit']['enumType']);
     }
 }
 
