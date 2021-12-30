@@ -129,6 +129,26 @@ first.
 Now the metadata information will only be parsed once and stored in
 the cache driver.
 
+Doctrine ORM includes a custom PSR-6 cache implementation that exports the metadata to
+PHP files in a way that the engine can use performance optimizations: Interned strings,
+compact arrays and Opcache. It offers the best performance, but only works for
+Metadata.
+
+.. code-block:: php
+
+    <?php
+    $debug = false;
+    $cache = \Doctrine\ORM\Mapping\Cache\PhpMetadataCache(
+        '/path/to/writable/directory',
+        $debug,
+        'prefix_'
+    );
+    $config = new \Doctrine\ORM\Configuration();
+    $config->setMetadataCache($cache);
+
+The ``$debug`` flag can be used during development to automatically trigger
+a regeneration of the cache file when the entity file changed.
+
 Clearing the Cache
 ------------------
 
