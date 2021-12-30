@@ -5,9 +5,10 @@ declare(strict_types=1);
 namespace Doctrine\ORM\Mapping;
 
 use ReflectionProperty;
+use ReturnTypeWillChange;
 use UnitEnum;
 
-class ReflectionEnumProperty
+class ReflectionEnumProperty extends ReflectionProperty
 {
     /** @var ReflectionProperty */
     private $originalReflectionProperty;
@@ -26,6 +27,7 @@ class ReflectionEnumProperty
      *
      * @return mixed
      */
+    #[ReturnTypeWillChange]
     public function getValue($object = null)
     {
         $enum = $this->originalReflectionProperty->getValue($object);
@@ -37,6 +39,7 @@ class ReflectionEnumProperty
         return $enum->value;
     }
 
+    #[ReturnTypeWillChange]
     public function setValue($object, $value = null)
     {
         if ($value !== null) {
