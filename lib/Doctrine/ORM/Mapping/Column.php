@@ -44,7 +44,7 @@ final class Column implements Annotation
     /** @var bool */
     public $nullable = false;
 
-    /** @var class-string<\Enum>|null */
+    /** @var class-string<\UnitEnum>|null */
     public $enumType = null;
 
     /** @var array<string,mixed> */
@@ -54,6 +54,7 @@ final class Column implements Annotation
     public $columnDefinition;
 
     /**
+     * @param class-string<\UnitEnum> $enumType
      * @param array<string,mixed> $options
      */
     public function __construct(

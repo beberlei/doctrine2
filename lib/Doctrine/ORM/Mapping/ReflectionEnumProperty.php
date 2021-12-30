@@ -16,7 +16,7 @@ class ReflectionEnumProperty extends ReflectionProperty
     /** @var class-string<UnitEnum> */
     private $enumType;
 
-    public function __construct($originalReflectionProperty, string $enumType)
+    public function __construct(ReflectionProperty $originalReflectionProperty, string $enumType)
     {
         $this->originalReflectionProperty = $originalReflectionProperty;
         $this->enumType                   = $enumType;
