@@ -18,6 +18,10 @@ class EnumTest extends OrmFunctionalTestCase
     {
         parent::setUp();
 
+        if ($this->isSecondLevelCacheEnabled) {
+            $this->markTestSkipped();
+        }
+
         $this->setUpEntitySchema([
             Card::class,
         ]);
