@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Doctrine\ORM\Mapping\Driver;
 
-use BackedEnum;
 use Doctrine\Common\Collections\Criteria;
 use Doctrine\ORM\Mapping\Builder\EntityListenerBuilder;
 use Doctrine\ORM\Mapping\ClassMetadata as Metadata;
