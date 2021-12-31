@@ -55,7 +55,7 @@ final class Column implements Annotation
 
     /**
      * @param class-string<\BackedEnum>|null $enumType
-     * @param array<string,mixed>       $options
+     * @param array<string,mixed>            $options
      */
     public function __construct(
         ?string $name = null,

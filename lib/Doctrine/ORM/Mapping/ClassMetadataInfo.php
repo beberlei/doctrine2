@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Doctrine\ORM\Mapping;
 
+use BackedEnum;
 use BadMethodCallException;
 use DateInterval;
 use DateTime;
@@ -38,8 +39,8 @@ use function array_values;
 use function assert;
 use function class_exists;
 use function count;
-use function explode;
 use function enum_exists;
+use function explode;
 use function gettype;
 use function in_array;
 use function interface_exists;
@@ -1029,7 +1030,7 @@ class ClassMetadataInfo implements ClassMetadata
                 ? $reflService->getAccessibleProperty($mapping['declared'], $field)
                 : $reflService->getAccessibleProperty($this->name, $field);
 
-            if (isset($mapping['enumType'])) {
+            if (isset($mapping['enumType']) && $this->reflFields[$field] !== null) {
                 $this->reflFields[$field] = new ReflectionEnumProperty(
                     $this->reflFields[$field],
                     $mapping['enumType']

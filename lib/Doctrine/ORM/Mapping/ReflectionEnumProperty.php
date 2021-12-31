@@ -28,6 +28,8 @@ class ReflectionEnumProperty extends ReflectionProperty
     /**
      * {@inheritDoc}
      *
+     * @param mixed $object
+     *
      * @return int|string|null
      */
     #[ReturnTypeWillChange]
@@ -42,6 +44,12 @@ class ReflectionEnumProperty extends ReflectionProperty
         return $enum->value;
     }
 
+    /**
+     * @param mixed $object
+     * @param mixed $value
+     *
+     * @return void
+     */
     #[ReturnTypeWillChange]
     public function setValue($object, $value = null)
     {
