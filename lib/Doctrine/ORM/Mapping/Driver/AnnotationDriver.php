@@ -718,7 +718,7 @@ class AnnotationDriver extends AbstractAnnotationDriver
      *                   unique: bool,
      *                   nullable: bool,
      *                   precision: int,
-     *                   enumType: class-string<BackedEnum>,
+     *                   enumType?: class-string,
      *                   options?: mixed[],
      *                   columnName?: string,
      *                   columnDefinition?: string
@@ -748,7 +748,7 @@ class AnnotationDriver extends AbstractAnnotationDriver
             $mapping['columnDefinition'] = $column->columnDefinition;
         }
 
-        if ($column->enumType) {
+        if ($column->enumType !== null) {
             $mapping['enumType'] = $column->enumType;
         }
 

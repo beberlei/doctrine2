@@ -12,9 +12,12 @@ class ReflectionEnumProperty extends ReflectionProperty
     /** @var ReflectionProperty */
     private $originalReflectionProperty;
 
-    /** @var class-string<BackedEnum> */
+    /** @var class-string<\BackedEnum> */
     private $enumType;
 
+    /**
+     * @param class-string<\BackedEnum> $enumType
+     */
     public function __construct(ReflectionProperty $originalReflectionProperty, string $enumType)
     {
         $this->originalReflectionProperty = $originalReflectionProperty;
@@ -24,7 +27,7 @@ class ReflectionEnumProperty extends ReflectionProperty
     /**
      * {@inheritDoc}
      *
-     * @return int|string
+     * @return int|string|null
      */
     #[ReturnTypeWillChange]
     public function getValue($object = null)
