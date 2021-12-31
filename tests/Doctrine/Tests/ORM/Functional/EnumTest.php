@@ -8,16 +8,13 @@ use Doctrine\Tests\Models\Enums\Card;
 use Doctrine\Tests\Models\Enums\Suit;
 use Doctrine\Tests\OrmFunctionalTestCase;
 
-use const PHP_VERSION_ID;
-
+/**
+ * @requires PHP 8.1
+ */
 class EnumTest extends OrmFunctionalTestCase
 {
     public function setUp(): void
     {
-        if (PHP_VERSION_ID < 80100) {
-            $this->markTestSkipped('Enum support requires PHP 8.1+');
-        }
-
         parent::setUp();
 
         $this->setUpEntitySchema([

@@ -1145,12 +1145,11 @@ abstract class AbstractMappingDriverTest extends OrmTestCase
         self::assertSame('count', $metadata->getFieldMapping('count')['columnName']);
     }
 
+    /**
+     * @requires PHP 8.1
+     */
     public function testEnumType(): void
     {
-        if (PHP_VERSION_ID < 80100) {
-            $this->markTestSkipped('Only PHP 8.1+ supports enums.');
-        }
-
         $metadata = $this->createClassMetadata(Card::class);
 
         self::assertEquals(Suit::class, $metadata->fieldMappings['suit']['enumType']);

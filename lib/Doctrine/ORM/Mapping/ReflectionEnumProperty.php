@@ -6,7 +6,6 @@ namespace Doctrine\ORM\Mapping;
 
 use ReflectionProperty;
 use ReturnTypeWillChange;
-use UnitEnum;
 
 class ReflectionEnumProperty extends ReflectionProperty
 {
