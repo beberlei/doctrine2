@@ -801,7 +801,7 @@ class XmlDriver extends FileDriver
       *                   scale?: int,
       *                   unique?: bool,
       *                   nullable?: bool,
-      *                   enumType?: class-string<BackedEnum>,
+      *                   enumType?: string,
       *                   version?: bool,
       *                   columnDefinition?: string,
       *                   options?: array
