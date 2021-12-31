@@ -1476,6 +1476,13 @@ class ClassMetadataInfo implements ClassMetadata
                 ! isset($mapping['type'])
                 && ($type instanceof ReflectionNamedType)
             ) {
+                if (PHP_VERSION_ID >= 80100 && enum_exists($type->getName(), false)) {
+                    $mapping['enumType'] = $type->getName();
+
+                    $reflection = new \ReflectionEnum($type->getName());
+                    $type = $reflection->getBackingType();
+                }
+
                 switch ($type->getName()) {
                     case DateInterval::class:
                         $mapping['type'] = Types::DATEINTERVAL;
@@ -1595,6 +1602,16 @@ class ClassMetadataInfo implements ClassMetadata
             }
 
             $mapping['requireSQLConversion'] = true;
+        }
+
+        if (isset($mapping['enumType'])) {
+            if (PHP_VERSION_ID < 80100) {
+                throw MappingException::enumsRequirePhp81($this->name, $mapping['fieldName']);
+            }
+
+            if (!enum_exists($mapping['enumType'])) {
+                throw MappingException::nonEnumTypeMapped($this->name, $mapping['fieldName'], $mapping['enumType']);
+            }
         }
 
         return $mapping;
