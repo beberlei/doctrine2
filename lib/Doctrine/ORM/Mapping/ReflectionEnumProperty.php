@@ -13,7 +13,7 @@ class ReflectionEnumProperty extends ReflectionProperty
     /** @var ReflectionProperty */
     private $originalReflectionProperty;
 
-    /** @var class-string<UnitEnum> */
+    /** @var class-string<BackedEnum> */
     private $enumType;
 
     public function __construct(ReflectionProperty $originalReflectionProperty, string $enumType)
@@ -25,7 +25,7 @@ class ReflectionEnumProperty extends ReflectionProperty
     /**
      * {@inheritDoc}
      *
-     * @return mixed
+     * @return int|string
      */
     #[ReturnTypeWillChange]
     public function getValue($object = null)

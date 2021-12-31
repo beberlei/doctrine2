@@ -718,7 +718,7 @@ class AnnotationDriver extends AbstractAnnotationDriver
      *                   unique: bool,
      *                   nullable: bool,
      *                   precision: int,
-     *                   enumType: class-string,
+     *                   enumType: class-string<BackedEnum>,
      *                   options?: mixed[],
      *                   columnName?: string,
      *                   columnDefinition?: string
