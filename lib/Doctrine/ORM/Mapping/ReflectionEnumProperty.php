@@ -28,13 +28,17 @@ class ReflectionEnumProperty extends ReflectionProperty
     /**
      * {@inheritDoc}
      *
-     * @param object $object
+     * @param object|null $object
      *
      * @return int|string|null
      */
     #[ReturnTypeWillChange]
     public function getValue($object = null)
     {
+        if ($object === null) {
+            return null;
+        }
+
         $enum = $this->originalReflectionProperty->getValue($object);
 
         if ($enum === null) {
