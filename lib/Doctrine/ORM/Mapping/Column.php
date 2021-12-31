@@ -54,7 +54,7 @@ final class Column implements Annotation
     public $columnDefinition;
 
     /**
-     * @param class-string<\BackedEnum> $enumType
+     * @param class-string<\BackedEnum>|null $enumType
      * @param array<string,mixed>       $options
      */
     public function __construct(
