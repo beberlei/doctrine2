@@ -1917,6 +1917,6 @@ parameters:
 			path: lib/Doctrine/ORM/Utility/HierarchyDiscriminatorResolver.php
 
 		-
-			message: "#^Function enum_exists not found.#"
+			message: "#^Used function enum_exists not found.#"
 			count: 2
 			path: lib/Doctrine/ORM/Mapping/ClassMetadataInfo.php

@@ -28,7 +28,7 @@ class ReflectionEnumProperty extends ReflectionProperty
     /**
      * {@inheritDoc}
      *
-     * @param mixed $object
+     * @param object $object
      *
      * @return int|string|null
      */
@@ -45,7 +45,7 @@ class ReflectionEnumProperty extends ReflectionProperty
     }
 
     /**
-     * @param mixed $object
+     * @param object $object
      * @param mixed $value
      *
      * @return void
