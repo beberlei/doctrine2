@@ -135,6 +135,10 @@
                 <!-- DBAL 3.2 forward compatibility -->
                 <referencedClass name="Doctrine\DBAL\Platforms\PostgreSQLPlatform"/>
                 <referencedClass name="Doctrine\DBAL\Platforms\SQLServerPlatform"/>
+
+                <!-- PHP 8.1 Enum support -->
+                <referencedClass name="BackedEnum"/>
+                <referencedClass name="ReflectionEnum"/>
             </errorLevel>
         </UndefinedClass>
         <UndefinedDocblockClass>
