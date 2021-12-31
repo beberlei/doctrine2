@@ -7,6 +7,7 @@ namespace Doctrine\Tests\ORM\Functional;
 use Doctrine\Tests\Models\Enums\Card;
 use Doctrine\Tests\Models\Enums\Suit;
 use Doctrine\Tests\OrmFunctionalTestCase;
+use ValueError;
 
 /**
  * @requires PHP 8.1
@@ -53,7 +54,7 @@ class EnumTest extends OrmFunctionalTestCase
             [$metadata->fieldMappings['id']['columnName'] => $card->id]
         );
 
-        $this->expectException(\ValueError::class);
+        $this->expectException(ValueError::class);
         $this->expectDeprecationMessage('"invalid" is not a valid backing value for enum "Doctrine\Tests\Models\Enums\Suit"');
 
         $this->_em->find(Card::class, $card->id);

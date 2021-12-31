@@ -1767,7 +1767,7 @@ parameters:
 			path: lib/Doctrine/ORM/Tools/Export/Driver/XmlExporter.php
 
 		-
-			message: "#^Offset 'version' on array\\{type\\: string, fieldName\\: string, columnName\\?\\: string, length\\?\\: int, id\\?\\: bool, nullable\\?\\: bool, enumType\\?\\: class-string, columnDefinition\\?\\: string, \\.\\.\\.\\} in isset\\(\\) does not exist\\.$#"
+			message: "#^Offset 'version' on array#"
 			count: 1
 			path: lib/Doctrine/ORM/Tools/Export/Driver/XmlExporter.php
 
@@ -1916,3 +1916,7 @@ parameters:
 			count: 1
 			path: lib/Doctrine/ORM/Utility/HierarchyDiscriminatorResolver.php
 
+		-
+			message: "#^Function enum_exists not found.#"
+			count: 2
+			path: lib/Doctrine/ORM/Mapping/ClassMetadataInfo.php

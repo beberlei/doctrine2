@@ -141,6 +141,10 @@
             <errorLevel type="suppress">
                 <!-- DBAL 2 compatibility -->
                 <referencedClass name="Doctrine\DBAL\Driver\ResultStatement"/>
+
+                <!-- PHP 8.1 Enum support -->
+                <referencedClass name="BackedEnum"/>
+                <referencedClass name="ReflectionEnum"/>
             </errorLevel>
         </UndefinedDocblockClass>
         <UndefinedMethod>
@@ -149,5 +153,10 @@
                 <referencedMethod name="Doctrine\DBAL\Platforms\AbstractPlatform::getGuidExpression"/>
             </errorLevel>
         </UndefinedMethod>
+        <UndefinedFunction>
+            <errorLevel type="suppress">
+                <referencedFunction name="enum_exists" />
+            </errorLevel>
+        </UndefinedFunction>
     </issueHandlers>
 </psalm>

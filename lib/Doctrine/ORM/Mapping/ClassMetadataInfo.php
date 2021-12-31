@@ -22,6 +22,7 @@ use Doctrine\Persistence\Mapping\ReflectionService;
 use InvalidArgumentException;
 use LogicException;
 use ReflectionClass;
+use ReflectionEnum;
 use ReflectionNamedType;
 use ReflectionProperty;
 use RuntimeException;
@@ -38,6 +39,7 @@ use function assert;
 use function class_exists;
 use function count;
 use function explode;
+use function enum_exists;
 use function gettype;
 use function in_array;
 use function interface_exists;
@@ -1479,8 +1481,10 @@ class ClassMetadataInfo implements ClassMetadata
                 if (PHP_VERSION_ID >= 80100 && enum_exists($type->getName(), false)) {
                     $mapping['enumType'] = $type->getName();
 
-                    $reflection = new \ReflectionEnum($type->getName());
-                    $type = $reflection->getBackingType();
+                    $reflection = new ReflectionEnum($type->getName());
+                    $type       = $reflection->getBackingType();
+
+                    assert($type instanceof ReflectionNamedType);
                 }
 
                 switch ($type->getName()) {
@@ -1609,7 +1613,7 @@ class ClassMetadataInfo implements ClassMetadata
                 throw MappingException::enumsRequirePhp81($this->name, $mapping['fieldName']);
             }
 
-            if (!enum_exists($mapping['enumType'])) {
+            if (! enum_exists($mapping['enumType'])) {
                 throw MappingException::nonEnumTypeMapped($this->name, $mapping['fieldName'], $mapping['enumType']);
             }
         }

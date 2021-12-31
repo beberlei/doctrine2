@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Doctrine\ORM\Mapping;
 
+use BackedEnum;
 use ReflectionProperty;
 use ReturnTypeWillChange;
 
@@ -12,11 +13,11 @@ class ReflectionEnumProperty extends ReflectionProperty
     /** @var ReflectionProperty */
     private $originalReflectionProperty;
 
-    /** @var class-string<\BackedEnum> */
+    /** @var class-string<BackedEnum> */
     private $enumType;
 
     /**
-     * @param class-string<\BackedEnum> $enumType
+     * @param class-string<BackedEnum> $enumType
      */
     public function __construct(ReflectionProperty $originalReflectionProperty, string $enumType)
     {
