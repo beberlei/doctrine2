@@ -51,8 +51,6 @@ class ReflectionEnumProperty extends ReflectionProperty
     /**
      * @param object $object
      * @param mixed  $value
-     *
-     * @return void
      */
     public function setValue($object, $value = null): void
     {
