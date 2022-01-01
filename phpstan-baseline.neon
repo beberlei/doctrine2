@@ -276,6 +276,11 @@ parameters:
 			path: lib/Doctrine/ORM/Mapping/ClassMetadataInfo.php
 
 		-
+			message: "#^Function enum_exists not found\\.$#"
+			count: 2
+			path: lib/Doctrine/ORM/Mapping/ClassMetadataInfo.php
+
+		-
 			message: "#^Method Doctrine\\\\ORM\\\\Mapping\\\\NamingStrategy\\:\\:joinColumnName\\(\\) invoked with 2 parameters, 1 required\\.$#"
 			count: 2
 			path: lib/Doctrine/ORM/Mapping/ClassMetadataInfo.php
@@ -287,6 +292,11 @@ parameters:
 
 		-
 			message: "#^Offset 'schema' on array\\{name\\: string, schema\\: string, indexes\\: array, uniqueConstraints\\: array, options\\: array\\<string, mixed\\>, quoted\\?\\: bool\\} on left side of \\?\\? always exists and is not nullable\\.$#"
+			count: 1
+			path: lib/Doctrine/ORM/Mapping/ClassMetadataInfo.php
+
+		-
+			message: "#^Used function enum_exists not found\\.$#"
 			count: 1
 			path: lib/Doctrine/ORM/Mapping/ClassMetadataInfo.php
 
@@ -1767,7 +1777,7 @@ parameters:
 			path: lib/Doctrine/ORM/Tools/Export/Driver/XmlExporter.php
 
 		-
-			message: "#^Offset 'version' on array#"
+			message: "#^Offset 'version' on array\\{type\\: string, fieldName\\: string, columnName\\?\\: string, length\\?\\: int, id\\?\\: bool, nullable\\?\\: bool, enumType\\?\\: class\\-string\\<BackedEnum\\>, columnDefinition\\?\\: string, \\.\\.\\.\\} in isset\\(\\) does not exist\\.$#"
 			count: 1
 			path: lib/Doctrine/ORM/Tools/Export/Driver/XmlExporter.php
 
@@ -1916,7 +1926,3 @@ parameters:
 			count: 1
 			path: lib/Doctrine/ORM/Utility/HierarchyDiscriminatorResolver.php
 
-		-
-			message: "#unction enum_exists not found.#"
-			count: 3
-			path: lib/Doctrine/ORM/Mapping/ClassMetadataInfo.php
