@@ -54,8 +54,7 @@ class ReflectionEnumProperty extends ReflectionProperty
      *
      * @return void
      */
-    #[ReturnTypeWillChange]
-    public function setValue($object, $value = null)
+    public function setValue($object, $value = null): void
     {
         if ($value !== null) {
             $enumType = $this->enumType;
