@@ -236,7 +236,7 @@ Additionally, Doctrine will map PHP types to ``type`` attribute as follows:
 - ``string`` or any other type: ``string``
 
 As of version 2.11 Doctrine can also automatically map typed properties using a
-PHP 8.1 enums to set the right ``type`` and ``enumType``.
+PHP 8.1 enum to set the right ``type`` and ``enumType``.
 
 .. _reference-mapping-types:
 
