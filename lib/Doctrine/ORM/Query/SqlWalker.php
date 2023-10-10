@@ -108,6 +108,8 @@ class SqlWalker implements TreeWalker
     /** @var mixed[] */
     private $tableAliasMap = [];
 
+    private int $withinWhereClause = 0;
+
     /**
      * Map from result variable names to their SQL column alias names.
      *
@@ -691,6 +693,10 @@ class SqlWalker implements TreeWalker
                 $fieldName = $pathExpr->field;
                 $dqlAlias  = $pathExpr->identificationVariable;
                 $class     = $this->getMetadataForDqlAlias($dqlAlias);
+
+                if ($this->withinWhereClause === 1 && isset($this->selectedClasses[$dqlAlias]) && !in_array($dqlAlias, $this->rootAliases)) {
+                    throw new \RuntimeException($dqlAlias . ' roots: ' . implode($this->rootAliases));
+                }
 
                 if ($this->useSqlTableAliases) {
                     $sql .= $this->walkIdentificationVariable($dqlAlias, $fieldName) . '.';
@@ -2018,6 +2024,7 @@ class SqlWalker implements TreeWalker
      */
     public function walkWhereClause($whereClause)
     {
+        $this->withinWhereClause++;
         $condSql  = $whereClause !== null ? $this->walkConditionalExpression($whereClause->conditionalExpression) : '';
         $discrSql = $this->generateDiscriminatorColumnConditionSQL($this->rootAliases);
 
@@ -2049,6 +2056,8 @@ class SqlWalker implements TreeWalker
         if ($discrSql) {
             return ' WHERE ' . $discrSql;
         }
+
+        $this->withinWhereClause--;
 
         return '';
     }
