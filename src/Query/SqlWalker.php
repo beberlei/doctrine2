@@ -112,7 +112,7 @@ class SqlWalker
     /**
      * A list of classes that appear in non-scalar SelectExpressions.
      *
-     * @phpstan-var array<string, array{class: ClassMetadata, dqlAlias: string, resultAlias: string|null}>
+     * @phpstan-var array<string, array{class: ClassMetadata, dqlAlias: string, resultAlias: string|null, partial: bool}>>
      */
     private array $selectedClasses = [];
 
@@ -679,10 +679,11 @@ class SqlWalker
             $class       = $selectedClass['class'];
             $dqlAlias    = $selectedClass['dqlAlias'];
             $resultAlias = $selectedClass['resultAlias'];
+            $isPartial   = $selectedClass['partial'];
 
             // Register as entity or joined entity result
             if (! isset($this->queryComponents[$dqlAlias]['relation'])) {
-                $this->rsm->addEntityResult($class->name, $dqlAlias, $resultAlias);
+                $this->rsm->addEntityResult($class->name, $dqlAlias, $resultAlias, $isPartial);
             } else {
                 assert(isset($this->queryComponents[$dqlAlias]['parent']));
 
@@ -691,6 +692,7 @@ class SqlWalker
                     $dqlAlias,
                     $this->queryComponents[$dqlAlias]['parent'],
                     $this->queryComponents[$dqlAlias]['relation']->fieldName,
+                    $isPartial,
                 );
             }
 
@@ -1386,6 +1388,7 @@ class SqlWalker
                 'class'       => $class,
                 'dqlAlias'    => $dqlAlias,
                 'resultAlias' => $resultAlias,
+                'partial'     => $partialFieldSet !== [],
             ];
         }
 

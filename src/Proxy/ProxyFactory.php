@@ -206,7 +206,7 @@ EOPHP;
      * @param class-string $className
      * @param array<mixed> $identifier
      */
-    public function getProxy(string $className, array $identifier): object
+    public function getProxy(string $className, array $identifier, bool $assignIdentifiers = true): object
     {
         if ($this->em->getConfiguration()->isNativeLazyObjectsEnabled()) {
             $classMetadata       = $this->em->getClassMetadata($className);
@@ -228,8 +228,10 @@ EOPHP;
                 }
             }, ReflectionClass::SKIP_INITIALIZATION_ON_SERIALIZE);
 
-            foreach ($identifier as $idField => $value) {
-                $classMetadata->propertyAccessors[$idField]->setValue($proxy, $value);
+            if ($assignIdentifiers) {
+                foreach ($identifier as $idField => $value) {
+                    $classMetadata->propertyAccessors[$idField]->setValue($proxy, $value);
+                }
             }
 
             return $proxy;

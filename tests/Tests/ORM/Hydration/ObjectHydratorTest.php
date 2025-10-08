@@ -1029,12 +1029,12 @@ class ObjectHydratorTest extends HydrationTestCase
             'Proxies',
             ProxyFactory::AUTOGENERATE_ALWAYS,
         ) extends ProxyFactory {
-            public function getProxy(string $className, array $identifier): object
+            public function getProxy(string $className, array $identifier, bool $assignIdentifiers = false): object
             {
                 TestCase::assertSame(ECommerceShipping::class, $className);
                 TestCase::assertSame(['id' => 42], $identifier);
 
-                return parent::getProxy($className, $identifier);
+                return parent::getProxy($className, $identifier, $assignIdentifiers);
             }
         };
 
@@ -1083,12 +1083,12 @@ class ObjectHydratorTest extends HydrationTestCase
             'Proxies',
             ProxyFactory::AUTOGENERATE_ALWAYS,
         ) extends ProxyFactory {
-            public function getProxy(string $className, array $identifier): object
+            public function getProxy(string $className, array $identifier, bool $assignIdentifiers = false): object
             {
                 TestCase::assertSame(ECommerceShipping::class, $className);
                 TestCase::assertSame(['id' => 42], $identifier);
 
-                return parent::getProxy($className, $identifier);
+                return parent::getProxy($className, $identifier, $assignIdentifiers);
             }
         };
 

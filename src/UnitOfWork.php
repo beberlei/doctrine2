@@ -2395,19 +2395,22 @@ class UnitOfWork implements PropertyChangedListener
 
                     Hydrator::hydrate($entity, (array) $class->reflClass->newInstanceWithoutConstructor());
                 }
-            } else {
-                if (
+            } elseif (
                     ! isset($hints[Query::HINT_REFRESH])
                     || (isset($hints[Query::HINT_REFRESH_ENTITY]) && $hints[Query::HINT_REFRESH_ENTITY] !== $entity)
-                ) {
-                    return $entity;
-                }
+            ) {
+                return $entity;
             }
 
             $this->originalEntityData[$oid] = $data;
         } else {
-            $entity = $class->newInstance();
-            $oid    = spl_object_id($entity);
+            if ($this->em->getConfiguration()->isNativeLazyObjectsEnabled() && isset($hints['isPartial']) && $hints['isPartial']) {
+                $entity = $this->em->getProxyFactory()->getProxy($class->name, $id, false);
+            } else {
+                $entity = $class->newInstance();
+            }
+
+            $oid = spl_object_id($entity);
             $this->registerManaged($entity, $id, $data);
 
             if (isset($hints[Query::HINT_READ_ONLY]) && $hints[Query::HINT_READ_ONLY] === true) {

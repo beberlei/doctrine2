@@ -226,9 +226,11 @@ class ValueObjectsTest extends OrmFunctionalTestCase
 
         // Selected field must be equal, all other fields must be null.
         self::assertEquals('Gosport', $person->address->city);
+        // TODO: What about lazy loading embeddables? *shrug*
         self::assertNull($person->address->street);
         self::assertNull($person->address->zip);
         self::assertNull($person->address->country);
+        // this actually loads the name field lazily
         self::assertNull($person->name);
     }
 
