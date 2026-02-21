@@ -17,6 +17,7 @@ use Doctrine\Persistence\Proxy;
 use LogicException;
 use ReflectionClass;
 use ReflectionProperty;
+use RuntimeException;
 use Symfony\Component\VarExporter\ProxyHelper;
 
 use function array_combine;
@@ -200,6 +201,36 @@ EOPHP;
         $this->uow                 = $em->getUnitOfWork();
         $this->autoGenerate        = (int) $autoGenerate;
         $this->identifierFlattener = new IdentifierFlattener($this->uow, $em->getMetadataFactory());
+    }
+
+    /** @param array<string, mixed> $entityIdentifier */
+    public function getEmbeddableProxy(string $className, object $parentEntity, array $entityIdentifier): object
+    {
+        if (! $this->em->getConfiguration()->isNativeLazyObjectsEnabled()) {
+            throw new RuntimeException('Embeddable proxies are only supported with native lazy objects.'); // todo exception
+        }
+
+        $classMetadata       = $this->em->getClassMetadata($className);
+        $entityPersister     = $this->uow->getEntityPersister($parentEntity::class);
+        $identifierFlattener = $this->identifierFlattener;
+
+        $cb = static function (object $object) use (
+            $entityIdentifier,
+            $entityPersister,
+            $identifierFlattener,
+            $classMetadata,
+            $parentEntity,
+        ): void {
+            $original = $entityPersister->loadById($entityIdentifier, $parentEntity);
+            if ($original === null) {
+                throw EntityNotFoundException::fromClassNameAndIdentifier(
+                    $classMetadata->getName(),
+                    $identifierFlattener->flattenIdentifier($classMetadata, $entityIdentifier),
+                );
+            }
+        };
+
+        return $classMetadata->reflClass->newLazyGhost($cb, ReflectionClass::SKIP_INITIALIZATION_ON_SERIALIZE);
     }
 
     /**

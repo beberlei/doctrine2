@@ -62,6 +62,7 @@ use function array_map;
 use function array_sum;
 use function array_values;
 use function assert;
+use function count;
 use function current;
 use function get_debug_type;
 use function implode;
@@ -2404,7 +2405,8 @@ class UnitOfWork implements PropertyChangedListener
 
             $this->originalEntityData[$oid] = $data;
         } else {
-            if ($this->em->getConfiguration()->isNativeLazyObjectsEnabled() && isset($hints['isPartial']) && $hints['isPartial']) {
+            $isPartiallyLoaded = $this->em->getConfiguration()->isNativeLazyObjectsEnabled() && isset($hints['isPartial']) && $hints['isPartial'];
+            if ($isPartiallyLoaded) {
                 $entity = $this->em->getProxyFactory()->getProxy($class->name, $id, false);
             } else {
                 $entity = $class->newInstance();
@@ -2415,6 +2417,11 @@ class UnitOfWork implements PropertyChangedListener
 
             if (isset($hints[Query::HINT_READ_ONLY]) && $hints[Query::HINT_READ_ONLY] === true) {
                 $this->readOnlyObjects[$oid] = true;
+            }
+
+            if ($isPartiallyLoaded && count($class->embeddedClasses) > 0) {
+                foreach ($class->embeddedClasses as $embeddedClass) {
+                }
             }
         }
 

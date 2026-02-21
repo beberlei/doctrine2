@@ -182,7 +182,7 @@ class ValueObjectsTest extends OrmFunctionalTestCase
 
     public function testPartialDqlOnEmbeddedObjectsField(): void
     {
-        if (!$this->_em->getConfiguration()->isNativeLazyObjectsEnabled()) {
+        if (! $this->_em->getConfiguration()->isNativeLazyObjectsEnabled()) {
             $this->markTestSkipped('Test requires native lazy objects to be enabled.');
         }
 
