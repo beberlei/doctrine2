@@ -8,8 +8,8 @@ use Doctrine\Tests\Models\CMS\CmsAddress;
 use Doctrine\Tests\Models\CMS\CmsUser;
 use Doctrine\Tests\OrmFunctionalTestCase;
 
+use function array_key_exists;
 use function array_keys;
-use function var_dump;
 
 class PartialObjectsTest extends OrmFunctionalTestCase
 {
@@ -42,12 +42,28 @@ class PartialObjectsTest extends OrmFunctionalTestCase
         $dql  = 'SELECT PARTIAL u.{id, name} FROM ' . CmsUser::class . ' u WHERE u.username = ?1';
         $user = $this->_em->createQuery($dql)->setParameter(1, 'alice')->getSingleResult();
 
-        var_dump(array_keys($this->_em->getUnitOfWork()->getOriginalEntityData($user)));
+        $partialKeys = array_keys($this->_em->getUnitOfWork()->getOriginalEntityData($user));
+        $this->assertContains('id', $partialKeys);
+        $this->assertContains('name', $partialKeys);
+        $this->assertNotContains('username', $partialKeys);
+        $this->assertNotContains('status', $partialKeys);
 
-        $user->name     = 'Bob';
+        // Modify the partially-loaded field before triggering full initialization.
+        $user->name = 'Bob';
+        // Accessing an uninitialized field triggers the lazy ghost initializer.
+        // The previously set 'name' must NOT be overwritten by the full DB load.
         $user->username = 'bob';
 
-        var_dump(array_keys($this->_em->getUnitOfWork()->getOriginalEntityData($user)));
         $this->assertEquals('Bob', $user->name);
+
+        // After full initialization originalEntityData must include all fields.
+        $fullKeys = array_keys($this->_em->getUnitOfWork()->getOriginalEntityData($user));
+        $this->assertContains('username', $fullKeys);
+        $this->assertContains('status', $fullKeys);
+        // The snapshot for 'name' must still reflect the original DB value ('Alice'),
+        // not the user-modified value, so the changeset is computed correctly.
+        $originalData = $this->_em->getUnitOfWork()->getOriginalEntityData($user);
+        $this->assertTrue(array_key_exists('name', $originalData));
+        $this->assertEquals('Alice', $originalData['name']);
     }
 }
