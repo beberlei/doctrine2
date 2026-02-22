@@ -290,15 +290,6 @@ class UnitOfWork implements PropertyChangedListener
     private array $readOnlyObjects = [];
 
     /**
-     * OIDs of entities created from partial queries (native lazy ghosts only).
-     * Used to detect when a partial proxy is being fully initialized so that
-     * already-loaded field values are preserved during the full load.
-     *
-     * @var array<int, true>
-     */
-    private array $partialObjects = [];
-
-    /**
      * Maps OIDs of partial entities to the list of scalar field names that were
      * loaded in the original partial query. Used during lazy init to determine
      * precisely which fields must not be overwritten from the full load.
@@ -2311,7 +2302,6 @@ class UnitOfWork implements PropertyChangedListener
         $this->collectionUpdates                =
         $this->extraUpdates                     =
         $this->readOnlyObjects                  =
-        $this->partialObjects                   =
         $this->partialObjectLoadedFields        =
         $this->pendingCollectionElementRemovals =
         $this->visitedCollections               =
@@ -2421,7 +2411,7 @@ class UnitOfWork implements PropertyChangedListener
             // Note: $em->refresh() does NOT set HINT_REFRESH_ENTITY, so explicit refreshes
             // always do a full overwrite regardless of partial-object status.
             if (
-                isset($this->partialObjects[$oid], $hints[Query::HINT_REFRESH_ENTITY])
+                isset($this->partialObjectLoadedFields[$oid], $hints[Query::HINT_REFRESH_ENTITY])
                 && $hints[Query::HINT_REFRESH_ENTITY] === $entity
             ) {
                 // Restrict $existingData to only the scalar fields loaded in the original
@@ -2433,7 +2423,7 @@ class UnitOfWork implements PropertyChangedListener
                     $this->originalEntityData[$oid] ?? [],
                     array_flip($partialFields),
                 );
-                unset($this->partialObjects[$oid], $this->partialObjectLoadedFields[$oid]);
+                unset($this->partialObjectLoadedFields[$oid]);
             }
 
             if ($this->isUninitializedObject($entity)) {
@@ -2473,7 +2463,6 @@ class UnitOfWork implements PropertyChangedListener
             }
 
             if ($isPartiallyLoaded) {
-                $this->partialObjects[$oid]            = true;
                 $this->partialObjectLoadedFields[$oid] = array_keys(
                     array_intersect_key($data, $class->fieldMappings),
                 );
