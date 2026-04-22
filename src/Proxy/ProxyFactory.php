@@ -213,6 +213,7 @@ EOPHP;
         $classMetadata       = $this->em->getClassMetadata($className);
         $entityPersister     = $this->uow->getEntityPersister($parentEntity::class);
         $identifierFlattener = $this->identifierFlattener;
+        $uow                 = $this->uow;
 
         $cb = static function (object $object) use (
             $entityIdentifier,
@@ -220,7 +221,17 @@ EOPHP;
             $identifierFlattener,
             $classMetadata,
             $parentEntity,
+            $uow,
         ): void {
+            // If the parent entity was already fully initialized (e.g. because
+            // another of its properties was accessed first), all embedded fields
+            // were already written as raw values onto this ghost during that
+            // hydration pass. PHP will materialize those raw values automatically
+            // once the initializer returns, so no SELECT is needed.
+            if (! $uow->isUninitializedObject($parentEntity)) {
+                return;
+            }
+
             $original = $entityPersister->loadById($entityIdentifier, $parentEntity);
             if ($original === null) {
                 throw EntityNotFoundException::fromClassNameAndIdentifier(

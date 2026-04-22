@@ -35,6 +35,7 @@ use Doctrine\ORM\Internal\UnitOfWork\InsertBatch;
 use Doctrine\ORM\Mapping\AssociationMapping;
 use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Mapping\MappingException;
+use Doctrine\ORM\Mapping\PropertyAccessors\PropertyAccessorFactory;
 use Doctrine\ORM\Mapping\ToManyInverseSideMapping;
 use Doctrine\ORM\Persisters\Collection\CollectionPersister;
 use Doctrine\ORM\Persisters\Collection\ManyToManyPersister;
@@ -2449,10 +2450,36 @@ class UnitOfWork implements PropertyChangedListener
             $this->originalEntityData[$oid] = $existingData + $data;
         } else {
             $allowsPartialLazyObject = $this->em->getConfiguration()->isNativeLazyObjectsEnabled()
-                && isset($hints['isPartial']) && $hints['isPartial']
-                && count($class->embeddedClasses) === 0;
+                && isset($hints['isPartial']) && $hints['isPartial'];
             if ($allowsPartialLazyObject) {
                 $entity = $this->em->getProxyFactory()->getProxy($class->name, $id, false);
+
+                // For each embeddable create a lazy ghost whose initializer
+                // loads the parent entity, so that only accessing an unloaded
+                // embedded field triggers a SELECT rather than loading eagerly.
+                // embeddedClasses is ordered: top-level entries appear before
+                // nested ones (which carry a declaredField), so the loop can
+                // safely reference already-created parent ghosts.
+                $embeddableGhosts = [];
+                foreach ($class->embeddedClasses as $property => $embeddableMapping) {
+                    $embeddableGhost             = $this->em->getProxyFactory()->getEmbeddableProxy(
+                        $embeddableMapping->class,
+                        $entity,
+                        $id,
+                    );
+                    $embeddableGhosts[$property] = $embeddableGhost;
+
+                    if ($embeddableMapping->declaredField !== null) {
+                        // Nested embeddable: wire it onto its parent embeddable ghost.
+                        PropertyAccessorFactory::createPropertyAccessor(
+                            $class->embeddedClasses[$embeddableMapping->declaredField]->class,
+                            $embeddableMapping->originalField,
+                        )->setValue($embeddableGhosts[$embeddableMapping->declaredField], $embeddableGhost);
+                    } else {
+                        // Top-level embeddable: wire it directly onto the entity ghost.
+                        $class->propertyAccessors[$property]->setValue($entity, $embeddableGhost);
+                    }
+                }
             } else {
                 $entity = $class->newInstance();
             }
