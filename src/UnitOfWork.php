@@ -2416,7 +2416,7 @@ class UnitOfWork implements PropertyChangedListener
                 // partial query. Other entries in originalEntityData (e.g. association
                 // snapshots added during hydration) must not block the full load from
                 // initialising those fields on the ghost.
-                $partialFields = $this->partialObjectLoadedFields[$oid] ?? [];
+                $partialFields = $this->partialObjectLoadedFields[$oid];
                 $existingData  = array_intersect_key(
                     $this->originalEntityData[$oid] ?? [],
                     array_flip($partialFields),
