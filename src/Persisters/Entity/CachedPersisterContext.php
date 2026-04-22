@@ -25,6 +25,13 @@ class CachedPersisterContext
     public string|null $selectColumnListSql = null;
 
     /**
+     * The SELECT column list SQL fragment that excludes lazy fields.
+     * Used for the initial load of entities that have lazy-mapped fields.
+     * Populated alongside selectColumnListSql by getSelectColumnsSQL().
+     */
+    public string|null $lazySelectColumnListSql = null;
+
+    /**
      * The JOIN SQL fragment used to eagerly load all many-to-one and one-to-one
      * associations configured as FETCH_EAGER, as well as all inverse one-to-one associations.
      */

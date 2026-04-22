@@ -733,7 +733,20 @@ class BasicEntityPersister implements EntityPersister
     ): object|null {
         $this->switchPersisterContext(null, $limit);
 
-        $sql              = $this->getSelectSQL($criteria, $assoc, $lockMode, $limit, null, $orderBy);
+        // For the initial load ($entity === null) of a class with lazy fields, use the lazy
+        // SQL so those fields are excluded from the SELECT. The ghost initializer path passes
+        // $entity (the ghost itself), signalling that a full load is needed instead.
+        $useLazySql = $entity === null
+            && $this->class->lazyFields !== []
+            && $this->em->getConfiguration()->isNativeLazyObjectsEnabled();
+
+        if ($useLazySql) {
+            $hints['isPartial'] = true;
+            $sql                = $this->getLazySelectSQL($criteria, $assoc, $lockMode, $limit, null, $orderBy);
+        } else {
+            $sql = $this->getSelectSQL($criteria, $assoc, $lockMode, $limit, null, $orderBy);
+        }
+
         [$params, $types] = $this->expandParameters($criteria);
         $stmt             = $this->conn->executeQuery($sql, $params, $types);
 
@@ -879,16 +892,27 @@ class BasicEntityPersister implements EntityPersister
             static fn (Order $order): string => $order->value,
             $criteria->orderings(),
         );
-        $limit   = $criteria->getMaxResults();
-        $offset  = $criteria->getFirstResult();
-        $query   = $this->getSelectSQL($criteria, null, null, $limit, $offset, $orderBy);
+        $limit  = $criteria->getMaxResults();
+        $offset = $criteria->getFirstResult();
+
+        $useLazySql = $this->class->lazyFields !== []
+            && $this->em->getConfiguration()->isNativeLazyObjectsEnabled();
+
+        $query = $useLazySql
+            ? $this->getLazySelectSQL($criteria, null, null, $limit, $offset, $orderBy)
+            : $this->getSelectSQL($criteria, null, null, $limit, $offset, $orderBy);
 
         [$params, $types] = $this->expandCriteriaParameters($criteria);
 
         $stmt     = $this->conn->executeQuery($query, $params, $types);
         $hydrator = $this->em->newHydrator($this->currentPersisterContext->selectJoinSql ? Query::HYDRATE_OBJECT : Query::HYDRATE_SIMPLEOBJECT);
 
-        return $hydrator->hydrateAll($stmt, $this->currentPersisterContext->rsm, [UnitOfWork::HINT_DEFEREAGERLOAD => true]);
+        $hints = [UnitOfWork::HINT_DEFEREAGERLOAD => true];
+        if ($useLazySql) {
+            $hints['isPartial'] = true;
+        }
+
+        return $hydrator->hydrateAll($stmt, $this->currentPersisterContext->rsm, $hints);
     }
 
     /**
@@ -958,13 +982,24 @@ class BasicEntityPersister implements EntityPersister
     ): array {
         $this->switchPersisterContext($offset, $limit);
 
-        $sql              = $this->getSelectSQL($criteria, null, null, $limit, $offset, $orderBy);
+        $useLazySql = $this->class->lazyFields !== []
+            && $this->em->getConfiguration()->isNativeLazyObjectsEnabled();
+
+        $sql = $useLazySql
+            ? $this->getLazySelectSQL($criteria, null, null, $limit, $offset, $orderBy)
+            : $this->getSelectSQL($criteria, null, null, $limit, $offset, $orderBy);
+
         [$params, $types] = $this->expandParameters($criteria);
         $stmt             = $this->conn->executeQuery($sql, $params, $types);
 
         $hydrator = $this->em->newHydrator($this->currentPersisterContext->selectJoinSql ? Query::HYDRATE_OBJECT : Query::HYDRATE_SIMPLEOBJECT);
 
-        return $hydrator->hydrateAll($stmt, $this->currentPersisterContext->rsm, [UnitOfWork::HINT_DEFEREAGERLOAD => true]);
+        $hints = [UnitOfWork::HINT_DEFEREAGERLOAD => true];
+        if ($useLazySql) {
+            $hints['isPartial'] = true;
+        }
+
+        return $hydrator->hydrateAll($stmt, $this->currentPersisterContext->rsm, $hints);
     }
 
     /**
@@ -1260,12 +1295,19 @@ class BasicEntityPersister implements EntityPersister
             return $this->currentPersisterContext->selectColumnListSql;
         }
 
-        $columnList = [];
+        $columnList     = [];
+        $lazyColumnList = []; // column list with lazy fields excluded, for initial partial loads
         $this->currentPersisterContext->rsm->addEntityResult($this->class->name, 'r'); // r for root
 
         // Add regular columns to select list
         foreach ($this->class->fieldNames as $field) {
-            $columnList[] = $this->getSelectColumnSQL($field, $this->class);
+            $columnSQL      = $this->getSelectColumnSQL($field, $this->class);
+            $columnList[]   = $columnSQL;
+            // Lazy fields are present in the full column list but excluded from the lazy list.
+            // The shared RSM registers all fields; absent columns are simply ignored by the hydrator.
+            if (! ($this->class->fieldMappings[$field]->lazy ?? false)) {
+                $lazyColumnList[] = $columnSQL;
+            }
         }
 
         $this->currentPersisterContext->selectJoinSql = '';
@@ -1275,7 +1317,8 @@ class BasicEntityPersister implements EntityPersister
             $assocColumnSQL = $this->getSelectColumnAssociationSQL($assocField, $assoc, $this->class);
 
             if ($assocColumnSQL) {
-                $columnList[] = $assocColumnSQL;
+                $columnList[]     = $assocColumnSQL;
+                $lazyColumnList[] = $assocColumnSQL; // FK columns always present in both
             }
 
             $isAssocToOneInverseSide = $assoc->isToOne() && ! $assoc->isOwningSide();
@@ -1299,7 +1342,10 @@ class BasicEntityPersister implements EntityPersister
             $this->currentPersisterContext->rsm->addJoinedEntityResult($assoc->targetEntity, $assocAlias, 'r', $assocField);
 
             foreach ($eagerEntity->fieldNames as $field) {
-                $columnList[] = $this->getSelectColumnSQL($field, $eagerEntity, $assocAlias);
+                // Eager joined entity fields are always included in both lists
+                $eagerColumnSQL   = $this->getSelectColumnSQL($field, $eagerEntity, $assocAlias);
+                $columnList[]     = $eagerColumnSQL;
+                $lazyColumnList[] = $eagerColumnSQL;
             }
 
             foreach ($eagerEntity->associationMappings as $eagerAssocField => $eagerAssoc) {
@@ -1311,7 +1357,8 @@ class BasicEntityPersister implements EntityPersister
                 );
 
                 if ($eagerAssocColumnSQL) {
-                    $columnList[] = $eagerAssocColumnSQL;
+                    $columnList[]     = $eagerAssocColumnSQL;
+                    $lazyColumnList[] = $eagerAssocColumnSQL;
                 }
             }
 
@@ -1371,10 +1418,92 @@ class BasicEntityPersister implements EntityPersister
             $this->currentPersisterContext->selectJoinSql .= implode(' AND ', $joinCondition);
         }
 
-        $this->currentPersisterContext->selectColumnListSql = implode(', ', $columnList);
+        $this->currentPersisterContext->selectColumnListSql     = implode(', ', $columnList);
+        $this->currentPersisterContext->lazySelectColumnListSql = implode(', ', $lazyColumnList);
         $this->updateFilterHash();
 
         return $this->currentPersisterContext->selectColumnListSql;
+    }
+
+    /**
+     * Returns the SELECT column list with lazy fields excluded, for use in the initial load
+     * of entities that have lazy-mapped fields. The shared RSM registers all fields; the
+     * hydrator simply ignores columns absent from the query result.
+     */
+    protected function getLazySelectColumnsSQL(): string
+    {
+        if ($this->currentPersisterContext->lazySelectColumnListSql !== null && $this->isFilterHashUpToDate()) {
+            return $this->currentPersisterContext->lazySelectColumnListSql;
+        }
+
+        $this->getSelectColumnsSQL(); // populates both caches and selectJoinSql
+
+        return $this->currentPersisterContext->lazySelectColumnListSql;
+    }
+
+    /**
+     * Builds a SELECT SQL statement that excludes lazy fields, identical in structure to
+     * getSelectSQL() but using the lazy column list. Used for the initial entity load when
+     * the class has lazy-mapped fields and PHP 8.4 native lazy objects are enabled.
+     */
+    protected function getLazySelectSQL(
+        array|Criteria $criteria,
+        AssociationMapping|null $assoc = null,
+        LockMode|int|null $lockMode = null,
+        int|null $limit = null,
+        int|null $offset = null,
+        array|null $orderBy = null,
+    ): string {
+        $this->switchPersisterContext($offset, $limit);
+
+        $joinSql    = '';
+        $orderBySql = '';
+
+        if ($assoc !== null && $assoc->isManyToMany()) {
+            $joinSql = $this->getSelectManyToManyJoinSQL($assoc);
+        }
+
+        if ($assoc !== null && $assoc->isOrdered()) {
+            $orderBy = $assoc->orderBy();
+        }
+
+        if ($orderBy) {
+            $orderBySql = $this->getOrderBySQL($orderBy, $this->getSQLTableAlias($this->class->name));
+        }
+
+        $conditionSql = $criteria instanceof Criteria
+            ? $this->getSelectConditionCriteriaSQL($criteria)
+            : $this->getSelectConditionSQL($criteria, $assoc);
+
+        $lockSql = match ($lockMode) {
+            LockMode::PESSIMISTIC_READ => ' ' . $this->getReadLockSQL($this->platform),
+            LockMode::PESSIMISTIC_WRITE => ' ' . $this->getWriteLockSQL($this->platform),
+            default => '',
+        };
+
+        $columnList = $this->getLazySelectColumnsSQL();
+        $tableAlias = $this->getSQLTableAlias($this->class->name);
+        $filterSql  = $this->generateFilterConditionSQL($this->class, $tableAlias);
+        $tableName  = $this->quoteStrategy->getTableName($this->class, $this->platform);
+
+        if ($filterSql !== '') {
+            $conditionSql = $conditionSql
+                ? $conditionSql . ' AND ' . $filterSql
+                : $filterSql;
+        }
+
+        $select = 'SELECT ' . $columnList;
+        $from   = ' FROM ' . $tableName . ' ' . $tableAlias;
+        $join   = $this->currentPersisterContext->selectJoinSql . $joinSql;
+        $where  = ($conditionSql ? ' WHERE ' . $conditionSql : '');
+        $lock   = $this->platform->appendLockHint($from, $lockMode ?? LockMode::NONE);
+        $query  = $select
+            . $lock
+            . $join
+            . $where
+            . $orderBySql;
+
+        return $this->platform->modifyLimitQuery($query, $limit, $offset ?? 0) . $lockSql;
     }
 
     /** Gets the SQL join fragment used when selecting entities from an association. */

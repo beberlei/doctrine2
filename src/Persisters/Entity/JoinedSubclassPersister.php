@@ -370,6 +370,7 @@ class JoinedSubclassPersister extends AbstractEntityInheritancePersister
         }
 
         $columnList       = [];
+        $lazyColumnList   = []; // column list with lazy fields excluded
         $discrColumn      = $this->class->getDiscriminatorColumn();
         $discrColumnName  = $discrColumn->name;
         $discrColumnType  = $discrColumn->type;
@@ -386,7 +387,11 @@ class JoinedSubclassPersister extends AbstractEntityInheritancePersister
                 ? $this->em->getClassMetadata($mapping->inherited)
                 : $this->class;
 
-            $columnList[] = $this->getSelectColumnSQL($fieldName, $class);
+            $columnSQL    = $this->getSelectColumnSQL($fieldName, $class);
+            $columnList[] = $columnSQL;
+            if (! ($mapping->lazy ?? false)) {
+                $lazyColumnList[] = $columnSQL;
+            }
         }
 
         // Add foreign key columns
@@ -402,12 +407,14 @@ class JoinedSubclassPersister extends AbstractEntityInheritancePersister
             $targetClass = $this->em->getClassMetadata($mapping->targetEntity);
 
             foreach ($mapping->joinColumns as $joinColumn) {
-                $columnList[] = $this->getSelectJoinColumnSQL(
+                $joinColumnSQL    = $this->getSelectJoinColumnSQL(
                     $tableAlias,
                     $joinColumn->name,
                     $this->quoteStrategy->getJoinColumnName($joinColumn, $this->class, $this->platform),
                     PersisterHelper::getTypeOfColumn($joinColumn->referencedColumnName, $targetClass, $this->em),
                 );
+                $columnList[]     = $joinColumnSQL;
+                $lazyColumnList[] = $joinColumnSQL; // FK columns always present in both
             }
         }
 
@@ -416,7 +423,9 @@ class JoinedSubclassPersister extends AbstractEntityInheritancePersister
             ? $baseTableAlias
             : $this->getSQLTableAlias($this->class->rootEntityName);
 
-        $columnList[] = $tableAlias . '.' . $discrColumnName;
+        $discrSql         = $tableAlias . '.' . $discrColumnName;
+        $columnList[]     = $discrSql;
+        $lazyColumnList[] = $discrSql; // discriminator always present
 
         // sub tables
         foreach ($this->class->subClasses as $subClassName) {
@@ -429,7 +438,11 @@ class JoinedSubclassPersister extends AbstractEntityInheritancePersister
                     continue;
                 }
 
-                $columnList[] = $this->getSelectColumnSQL($fieldName, $subClass);
+                $columnSQL    = $this->getSelectColumnSQL($fieldName, $subClass);
+                $columnList[] = $columnSQL;
+                if (! ($mapping->lazy ?? false)) {
+                    $lazyColumnList[] = $columnSQL;
+                }
             }
 
             // Add join columns (foreign keys)
@@ -441,17 +454,20 @@ class JoinedSubclassPersister extends AbstractEntityInheritancePersister
                 $targetClass = $this->em->getClassMetadata($mapping->targetEntity);
 
                 foreach ($mapping->joinColumns as $joinColumn) {
-                    $columnList[] = $this->getSelectJoinColumnSQL(
+                    $joinColumnSQL    = $this->getSelectJoinColumnSQL(
                         $tableAlias,
                         $joinColumn->name,
                         $this->quoteStrategy->getJoinColumnName($joinColumn, $subClass, $this->platform),
                         PersisterHelper::getTypeOfColumn($joinColumn->referencedColumnName, $targetClass, $this->em),
                     );
+                    $columnList[]     = $joinColumnSQL;
+                    $lazyColumnList[] = $joinColumnSQL;
                 }
             }
         }
 
-        $this->currentPersisterContext->selectColumnListSql = implode(', ', $columnList);
+        $this->currentPersisterContext->selectColumnListSql     = implode(', ', $columnList);
+        $this->currentPersisterContext->lazySelectColumnListSql = implode(', ', $lazyColumnList);
         $this->updateFilterHash();
 
         return $this->currentPersisterContext->selectColumnListSql;
