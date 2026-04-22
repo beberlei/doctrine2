@@ -2448,8 +2448,10 @@ class UnitOfWork implements PropertyChangedListener
             // equivalent to a plain assignment.
             $this->originalEntityData[$oid] = $existingData + $data;
         } else {
-            $isPartiallyLoaded = $this->em->getConfiguration()->isNativeLazyObjectsEnabled() && isset($hints['isPartial']) && $hints['isPartial'];
-            if ($isPartiallyLoaded) {
+            $allowsPartialLazyObject = $this->em->getConfiguration()->isNativeLazyObjectsEnabled()
+                && isset($hints['isPartial']) && $hints['isPartial']
+                && count($class->embeddedClasses) === 0;
+            if ($allowsPartialLazyObject) {
                 $entity = $this->em->getProxyFactory()->getProxy($class->name, $id, false);
             } else {
                 $entity = $class->newInstance();
@@ -2462,15 +2464,10 @@ class UnitOfWork implements PropertyChangedListener
                 $this->readOnlyObjects[$oid] = true;
             }
 
-            if ($isPartiallyLoaded) {
+            if ($allowsPartialLazyObject) {
                 $this->partialObjectLoadedFields[$oid] = array_keys(
                     array_intersect_key($data, $class->fieldMappings),
                 );
-            }
-
-            if ($isPartiallyLoaded && count($class->embeddedClasses) > 0) {
-                foreach ($class->embeddedClasses as $embeddedClass) {
-                }
             }
         }
 
