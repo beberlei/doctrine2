@@ -741,8 +741,7 @@ class BasicEntityPersister implements EntityPersister
             && $this->em->getConfiguration()->isNativeLazyObjectsEnabled();
 
         if ($useLazySql) {
-            $hints['isPartial'] = true;
-            $sql                = $this->getLazySelectSQL($criteria, $assoc, $lockMode, $limit, null, $orderBy);
+            $sql = $this->getLazySelectSQL($criteria, $assoc, $lockMode, $limit, null, $orderBy);
         } else {
             $sql = $this->getSelectSQL($criteria, $assoc, $lockMode, $limit, null, $orderBy);
         }
@@ -755,8 +754,14 @@ class BasicEntityPersister implements EntityPersister
             $hints[Query::HINT_REFRESH_ENTITY] = $entity;
         }
 
+        $rsm = $this->currentPersisterContext->rsm;
+        if ($useLazySql) {
+            $rsm                      = clone $rsm;
+            $rsm->partialAliases['r'] = true;
+        }
+
         $hydrator = $this->em->newHydrator($this->currentPersisterContext->selectJoinSql ? Query::HYDRATE_OBJECT : Query::HYDRATE_SIMPLEOBJECT);
-        $entities = $hydrator->hydrateAll($stmt, $this->currentPersisterContext->rsm, $hints);
+        $entities = $hydrator->hydrateAll($stmt, $rsm, $hints);
 
         return $entities ? $entities[0] : null;
     }
@@ -908,11 +913,14 @@ class BasicEntityPersister implements EntityPersister
         $hydrator = $this->em->newHydrator($this->currentPersisterContext->selectJoinSql ? Query::HYDRATE_OBJECT : Query::HYDRATE_SIMPLEOBJECT);
 
         $hints = [UnitOfWork::HINT_DEFEREAGERLOAD => true];
+
+        $rsm = $this->currentPersisterContext->rsm;
         if ($useLazySql) {
-            $hints['isPartial'] = true;
+            $rsm                      = clone $rsm;
+            $rsm->partialAliases['r'] = true;
         }
 
-        return $hydrator->hydrateAll($stmt, $this->currentPersisterContext->rsm, $hints);
+        return $hydrator->hydrateAll($stmt, $rsm, $hints);
     }
 
     /**
@@ -995,11 +1003,14 @@ class BasicEntityPersister implements EntityPersister
         $hydrator = $this->em->newHydrator($this->currentPersisterContext->selectJoinSql ? Query::HYDRATE_OBJECT : Query::HYDRATE_SIMPLEOBJECT);
 
         $hints = [UnitOfWork::HINT_DEFEREAGERLOAD => true];
+
+        $rsm = $this->currentPersisterContext->rsm;
         if ($useLazySql) {
-            $hints['isPartial'] = true;
+            $rsm                      = clone $rsm;
+            $rsm->partialAliases['r'] = true;
         }
 
-        return $hydrator->hydrateAll($stmt, $this->currentPersisterContext->rsm, $hints);
+        return $hydrator->hydrateAll($stmt, $rsm, $hints);
     }
 
     /**
