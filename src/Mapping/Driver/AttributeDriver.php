@@ -765,6 +765,10 @@ class AttributeDriver implements MappingDriver
             $mapping['enumType'] = $column->enumType;
         }
 
+        if ($column->lazy) {
+            $mapping['lazy'] = true;
+        }
+
         return $mapping;
     }
 }
