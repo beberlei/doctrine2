@@ -144,3 +144,94 @@ eventually initialized:
     // to the database value — the in-memory change is preserved.
     echo $user->email;
     echo $user->name; // 'Bob'
+
+.. _reference-lazy-fields:
+
+Lazy Fields (PHP 8.4+)
+----------------------
+
+Instead of writing ``PARTIAL`` DQL queries manually, you can annotate individual
+columns in your mapping with ``lazy: true``. Doctrine will then automatically
+exclude those fields from every ``SELECT`` and load their values transparently
+on first access — without any changes to calling code.
+
+This is the recommended way to defer large columns (e.g. ``TEXT``, ``BLOB``)
+that are rarely needed, because it applies the optimization globally and
+uniformly, without requiring every query to be written as a ``PARTIAL`` query.
+
+.. note::
+
+    Lazy fields require PHP 8.4 with :ref:`native lazy objects enabled
+    <reference-native-lazy-objects>`.
+
+.. configuration-block::
+
+   .. code-block:: attribute
+
+        <?php
+        use Doctrine\ORM\Mapping as ORM;
+
+        #[ORM\Entity]
+        class BlogPost
+        {
+            #[ORM\Id, ORM\GeneratedValue, ORM\Column]
+            public int $id;
+
+            #[ORM\Column]
+            public string $title;
+
+            /** Large text body — deferred until actually needed. */
+            #[ORM\Column(lazy: true)]
+            public string $body;
+        }
+
+   .. code-block:: xml
+
+        <entity name="BlogPost" table="blog_post">
+            <id name="id" type="integer">
+                <generator strategy="AUTO"/>
+            </id>
+            <field name="title" type="string"/>
+            <field name="body" type="text" lazy="true"/>
+        </entity>
+
+On every ``find()``, ``findBy()``, ``findAll()``, or full-entity DQL query,
+the lazy column is excluded from the ``SELECT``:
+
+.. code-block:: php
+
+    <?php
+    $post = $em->find(BlogPost::class, 1);
+    // SQL: SELECT id, title FROM blog_post WHERE id = ?
+    // $post is a lazy ghost — $post->body is not yet fetched.
+
+    echo $post->title; // no query — title was already loaded
+
+    echo $post->body;
+    // SQL: SELECT id, title, body FROM blog_post WHERE id = ?
+    // Ghost is initialized; all fields now available.
+
+Constraints
+~~~~~~~~~~~
+
+- Lazy fields must not be identifier (``#[Id]``) fields.
+- Lazy fields must not be version (``#[Version]``) fields.
+- Lazy fields must not be embedded (``#[Embedded]``) fields.
+- The feature has no effect without PHP 8.4 and native lazy objects enabled
+  (the field is loaded eagerly as usual).
+
+Including a lazy field in DQL
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A ``PARTIAL`` DQL query can explicitly include a lazy field, forcing it to
+be fetched in the same query:
+
+.. code-block:: php
+
+    <?php
+    $posts = $em->createQuery(
+        'SELECT PARTIAL p.{id, title, body} FROM App\Entity\BlogPost p'
+    )->getResult();
+
+    // body is now available without a further query.
+    echo $posts[0]->body;
