@@ -22,7 +22,7 @@ have to register them yourself.
 All the commands of the Doctrine Console require access to the
 ``EntityManager``. You have to inject it into the console application.
 
-Here is an example of a the project-specific ``bin/doctrine`` binary.
+Here is an example of a project-specific ``bin/doctrine`` binary.
 
 .. code-block:: php
 
@@ -96,6 +96,10 @@ The following Commands are currently available:
 -  ``orm:schema-tool:update`` Processes the schema and either
    update the database schema of EntityManager Storage Connection or
    generate the SQL output.
+-  ``orm:debug:event-manager`` Lists event listeners for an entity
+   manager, optionally filtered by event name.
+-  ``orm:debug:entity-listeners`` Lists entity listeners for a given
+   entity, optionally filtered by event name.
 
 The following alias is defined:
 

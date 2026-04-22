@@ -163,6 +163,7 @@ EOPHP;
                 );
             }
 
+            // @phpstan-ignore function.impossibleType (This method has been removed in Symfony 8)
             if (! method_exists(ProxyHelper::class, 'generateLazyGhost')) {
                 throw ORMInvalidArgumentException::lazyGhostUnavailable();
             }
@@ -513,7 +514,7 @@ EOPHP;
 
     private function generateUseLazyGhostTrait(ClassMetadata $class): string
     {
-        // @phpstan-ignore staticMethod.deprecated (Because we support Symfony < 7.3)
+        // @phpstan-ignore staticMethod.notFound (This method has been removed in Symfony 8)
         $code = ProxyHelper::generateLazyGhost($class->getReflectionClass());
         $code = substr($code, 7 + (int) strpos($code, "\n{"));
         $code = substr($code, 0, (int) strpos($code, "\n}"));

@@ -17,15 +17,18 @@ use Doctrine\ORM\UnitOfWork;
 use Generator;
 use LogicException;
 use ReflectionClass;
+use ReflectionEnum;
 
 use function array_key_exists;
 use function array_keys;
 use function array_map;
 use function array_merge;
 use function count;
+use function current;
 use function end;
 use function in_array;
 use function is_array;
+use function is_object;
 use function ksort;
 
 /**
@@ -126,8 +129,10 @@ abstract class AbstractHydrator
                     } else {
                         yield from $result;
                     }
-                } else {
+                } elseif (is_object(current($result))) {
                     yield $result;
+                } else {
+                    yield array_merge(...$result);
                 }
             }
         } finally {
@@ -593,12 +598,17 @@ abstract class AbstractHydrator
      */
     final protected function buildEnum(mixed $value, string $enumType): BackedEnum|array
     {
+        $reflection  = new ReflectionEnum($enumType);
+        $isIntBacked = $reflection->isBacked() && $reflection->getBackingType()->getName() === 'int';
+
         if (is_array($value)) {
             return array_map(
-                static fn ($value) => $enumType::from($value),
+                static fn ($value) => $enumType::from($isIntBacked ? (int) $value : $value),
                 $value,
             );
         }
+
+        $value = $isIntBacked ? (int) $value : $value;
 
         return $enumType::from($value);
     }

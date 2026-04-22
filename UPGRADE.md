@@ -1,4 +1,164 @@
+Note about upgrading: Doctrine uses static and runtime mechanisms to raise
+awareness about deprecated code.
+
+- Use of `@deprecated` docblock that is detected by IDEs (like PHPStorm) or
+  Static Analysis tools (like Psalm, phpstan)
+- Use of our low-overhead runtime deprecation API, details:
+  https://github.com/doctrine/deprecations/
+
+# Upgrade to 3.x General Notes
+
+We recommend you upgrade to DBAL 3 first before upgrading to ORM 3. See
+the DBAL upgrade docs: https://github.com/doctrine/dbal/blob/3.10.x/UPGRADE.md
+
+Rather than doing several major upgrades at once, we recommend you do the following:
+
+- upgrade to DBAL 3
+- deploy and monitor
+- upgrade to ORM 3
+- deploy and monitor
+- upgrade to DBAL 4
+- deploy and monitor
+
+If you are using Symfony, the recommended minimal Doctrine Bundle version is 2.15
+to run with ORM 3.
+
+At this point, we recommend upgrading to PHP 8.4 first and then directly from
+ORM 2.19 to 3.5 and up so that you can skip the lazy ghost proxy generation
+and directly start using native lazy objects.
+
+# Upgrade to 3.7
+
+## Conditional breaking changes
+
+3.7 adds support for `doctrine/collections` 3. If you upgrade to that version
+of `doctrine/collections`, there are breaking changes in `doctrine/orm` as well,
+because of cross-package inheritance and type declarations.
+
+Most notably, `Doctrine\ORM\PersistentCollection::add` no longer returns a boolean:
+
+```diff
+- public function add(mixed $value): bool
++ public function add(mixed $value): void
+```
+
+That method always returned `true`, so you can safely stop using the return
+value before upgrading.
+
+Also, if you extend `Doctrine\ORM\Persisters\SqlValueVisitor`, you need to
+ensure the following methods have a return type in your subclasses:
+
+- `walkComparison()`
+- `walkCompositeExpression()`
+- `walkValue()`
+
+## Deprecate `EventManager` return type in `EntityManager` methods
+
+The return type of the following methods has been changed from
+`Doctrine\Common\EventManager` to `Doctrine\Common\EventManagerInterface`:
+
+- `Doctrine\ORM\Decorator\EntityManagerDecorator::getEventManager()`
+- `Doctrine\ORM\EntityManager::getEventManager()`
+- `Doctrine\ORM\EntityManagerInterface::getEventManager()`
+
+All three methods continue to return an instance of `EventManager`, however
+relying on that is deprecated and will no longer be the guaranteed in 4.0.
+
 # Upgrade to 3.6
+
+## Deprecate using string expression for default values in mappings
+
+Using a string expression for default values in field mappings is deprecated.
+Use `Doctrine\DBAL\Schema\DefaultExpression` instances instead.
+
+Here is how to address this deprecation when mapping entities using PHP attributes:
+
+```diff
+ use DateTime;
++use Doctrine\DBAL\Schema\DefaultExpression\CurrentDate;
++use Doctrine\DBAL\Schema\DefaultExpression\CurrentTime;
++use Doctrine\DBAL\Schema\DefaultExpression\CurrentTimestamp;
+ use Doctrine\ORM\Mapping as ORM;
+
+ #[ORM\Entity]
+ final class TimeEntity
+ {
+     #[ORM\Id]
+     #[ORM\Column]
+     public int $id;
+
+-    #[ORM\Column(options: ['default' => 'CURRENT_TIMESTAMP'], insertable: false, updatable: false)]
++    #[ORM\Column(options: ['default' => new CurrentTimestamp()], insertable: false, updatable: false)]
+     public DateTime $createdAt;
+
+-    #[ORM\Column(options: ['default' => 'CURRENT_TIME'], insertable: false, updatable: false)]
++    #[ORM\Column(options: ['default' => new CurrentTime()], insertable: false, updatable: false)]
+     public DateTime $createdTime;
+
+-    #[ORM\Column(options: ['default' => 'CURRENT_DATE'], insertable: false, updatable: false)]
++    #[ORM\Column(options: ['default' => new CurrentDate()], insertable: false, updatable: false)]
+     public DateTime $createdDate;
+ }
+```
+
+Here is how to do the same when mapping entities using XML:
+
+```diff
+ <?xml version="1.0" encoding="UTF-8"?>
+
+ <doctrine-mapping xmlns="http://doctrine-project.org/schemas/orm/doctrine-mapping"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://doctrine-project.org/schemas/orm/doctrine-mapping
+                           https://www.doctrine-project.org/schemas/orm/doctrine-mapping.xsd">
+
+     <entity name="Doctrine\Tests\ORM\Functional\XmlTimeEntity">
+         <id name="id" type="integer" column="id">
+             <generator strategy="AUTO"/>
+         </id>
+
+         <field name="createdAt" type="datetime" insertable="false" updatable="false">
+             <options>
+-                <option name="default">CURRENT_TIMESTAMP</option>
++                <option name="default">
++                    <object class="Doctrine\DBAL\Schema\DefaultExpression\CurrentTimestamp"/>
++                </option>
+             </options>
+         </field>
+
+         <field name="createdAtImmutable" type="datetime_immutable" insertable="false" updatable="false">
+             <options>
+-                <option name="default">CURRENT_TIMESTAMP</option>
++                <option name="default">
++                    <object class="Doctrine\DBAL\Schema\DefaultExpression\CurrentTimestamp"/>
++                </option>
+             </options>
+         </field>
+
+         <field name="createdTime" type="time" insertable="false" updatable="false">
+             <options>
+-                <option name="default">CURRENT_TIME</option>
++                <option name="default">
++                    <object class="Doctrine\DBAL\Schema\DefaultExpression\CurrentTime"/>
++                </option>
+             </options>
+         </field>
+         <field name="createdDate" type="date" insertable="false" updatable="false">
+             <options>
+-                <option name="default">CURRENT_DATE</option>
++                <option name="default">
++                    <object class="Doctrine\DBAL\Schema\DefaultExpression\CurrentDate"/>
++                </option>
+             </options>
+         </field>
+     </entity>
+ </doctrine-mapping>
+```
+
+
+## Deprecate `FieldMapping::$default`
+
+The `default` property of `Doctrine\ORM\Mapping\FieldMapping` is deprecated and
+will be removed in 4.0. Instead, use `FieldMapping::$options['default']`.
 
 ## Deprecate specifying `nullable` on columns that end up being used in a primary key
 
@@ -38,7 +198,17 @@ Using `Doctrine\ORM\QueryBuilder::add('join', ...)` with a list of join parts
 is deprecated in favor of using an associative array of join parts with the
 root alias as key.
 
+## Deprecate using the `WITH` keyword for arbitrary DQL joins
+
+Using the `WITH` keyword to specify the condition for an arbitrary DQL join is
+deprecated in favor of using the `ON` keyword (similar to the SQL syntax for
+joins).
+The `WITH` keyword is now meant to be used only for filtering conditions in
+association joins.
+
 # Upgrade to 3.5
+
+See the General notes to upgrading to 3.x versions above.
 
 ## Deprecate not using native lazy objects on PHP 8.4+
 
@@ -93,6 +263,8 @@ decide to remove it before it is used too widely.
 
 # Upgrade to 3.4
 
+See the General notes to upgrading to 3.x versions above.
+
 ## Discriminator Map class duplicates
 
 Using the same class several times in a discriminator map is deprecated.
@@ -113,6 +285,8 @@ Companion accessor methods are deprecated as well.
 
 # Upgrade to 3.3
 
+See the General notes to upgrading to 3.x versions above.
+
 ## Deprecate `DatabaseDriver`
 
 The class `Doctrine\ORM\Mapping\Driver\DatabaseDriver` is deprecated without replacement.
@@ -128,6 +302,8 @@ method. Details can be found at https://github.com/doctrine/orm/pull/11188.
 
 
 # Upgrade to 3.2
+
+See the General notes to upgrading to 3.x versions above.
 
 ## Deprecate the `NotSupported` exception
 
@@ -155,6 +331,8 @@ using the `\Doctrine\ORM\Mapping\UniqueConstraint` and `\Doctrine\ORM\Mapping\In
 
 # Upgrade to 3.1
 
+See the General notes to upgrading to 3.x versions above.
+
 ## Deprecate `Doctrine\ORM\Mapping\ReflectionEnumProperty`
 
 This class is deprecated and will be removed in 4.0.
@@ -177,6 +355,8 @@ Using array access on instances of the following classes is deprecated:
 - `Doctrine\ORM\Mapping\JoinTableMapping`
 
 # Upgrade to 3.0
+
+See the General notes to upgrading to 3.x versions above.
 
 ## BC BREAK: Calling `ClassMetadata::getAssociationMappedByTargetField()` with the owning side of an association now throws an exception
 
@@ -203,6 +383,9 @@ so `$targetEntity` is a first argument now. This change affects only non-named a
 When using the `AUTO` strategy to let Doctrine determine the identity generation mechanism for
 an entity, and when using `doctrine/dbal` 4, PostgreSQL now uses `IDENTITY`
 instead of `SEQUENCE` or `SERIAL`.
+
+There are three ways to handle this change.
+
 * If you want to upgrade your existing tables to identity columns, you will need to follow [migration to identity columns on PostgreSQL](https://www.doctrine-project.org/projects/doctrine-dbal/en/4.0/how-to/postgresql-identity-migration.html)
 * If you want to keep using SQL sequences, you need to configure the ORM this way:
 ```php
@@ -215,6 +398,27 @@ $configuration->setIdentityGenerationPreferences([
     PostgreSQLPlatform::CLASS => ClassMetadata::GENERATOR_TYPE_SEQUENCE,
 ]);
 ```
+* You can change individual entities to use the `SEQUENCE` strategy instead of `AUTO`:
+```php
+
+diff --git a/src/Entity/Example.php b/src/Entity/Example.php
+index 28be8df378..3b7d61bda6 100644
+--- a/src/Entity/Example.php
++++ b/src/Entity/Example.php
+@@ -38,7 +38,7 @@ class Example
+
+     #[ORM\Id]
+     #[ORM\Column(type: 'integer')]
+-    #[ORM\GeneratedValue(strategy: 'AUTO')]
++    #[ORM\GeneratedValue(strategy: 'SEQUENCE')]
+     private int $id;
+
+     #[Assert\Length(max: 255)]
+```
+The later two options require a small database migration that will remove the default
+expression fetching the next value from the sequence. It's not strictly necessary to
+do this migration because the code will work anyway. A benefit of this approach is
+that you can just make and roll out the code changes first and then migrate the database later.
 
 ## BC BREAK: Throw exceptions when using illegal attributes on Embeddable
 
@@ -2134,7 +2338,7 @@ from 2.0 have to configure the annotation driver if they don't use `Configuratio
 
 ## Scalar mappings can now be omitted from DQL result
 
-You are now allowed to mark scalar SELECT expressions as HIDDEN an they are not hydrated anymore.
+You are now allowed to mark scalar SELECT expressions as HIDDEN and they are not hydrated anymore.
 Example:
 
 SELECT u, SUM(a.id) AS HIDDEN numArticles FROM User u LEFT JOIN u.Articles a ORDER BY numArticles DESC HAVING numArticles > 10

@@ -344,10 +344,10 @@ the Query object which can be retrieved from ``EntityManager#createQuery()``.
 Executing a Query
 ^^^^^^^^^^^^^^^^^
 
-The QueryBuilder is a builder object only -  it has no means of actually
-executing the Query. Additionally a set of parameters such as query hints
-cannot be set on the QueryBuilder itself. This is why you always have to convert
-a querybuilder instance into a Query object:
+The QueryBuilder is only a builder object - it has no means of actually
+executing the Query. Additional functionality, such as enabling the result cache,
+cannot be set on the QueryBuilder itself. This is why you must always convert
+a QueryBuilder instance into a Query object:
 
 .. code-block:: php
 
@@ -355,9 +355,8 @@ a querybuilder instance into a Query object:
     // $qb instanceof QueryBuilder
     $query = $qb->getQuery();
 
-    // Set additional Query options
-    $query->setQueryHint('foo', 'bar');
-    $query->useResultCache('my_cache_id');
+    // Enable the result cache
+    $query->enableResultCache(3600, 'my_custom_id');
 
     // Execute Query
     $result = $query->getResult();
@@ -554,6 +553,24 @@ using ``addCriteria``:
     // $qb instanceof QueryBuilder
     $qb->addCriteria($criteria);
     // then execute your query like normal
+
+Adding hints to a Query
+^^^^^^^^^^^^^^^^^^^^^^^
+
+You can also set query hints to a QueryBuilder by using ``setHint``:
+
+.. code-block:: php
+
+    <?php
+    // ...
+
+    // $qb instanceof QueryBuilder
+    $qb->setHint('hintName', 'hintValue');
+    // then execute your query like normal
+
+The query hint can hold anything the usual query hints can hold
+except null. Those hints will be applied to the query when the
+query is created.
 
 Low Level API
 ^^^^^^^^^^^^^

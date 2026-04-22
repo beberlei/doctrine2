@@ -24,13 +24,14 @@ use Doctrine\Tests\Models\CMS\CmsGroup;
 use Doctrine\Tests\Models\CMS\CmsUser;
 use Doctrine\Tests\OrmTestCase;
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\WithoutErrorHandler;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
 use function array_filter;
-use function class_exists;
+use function defined;
 
 /**
  * Test case for the QueryBuilder class used to build DQL query string in a
@@ -185,11 +186,11 @@ class QueryBuilderTest extends OrmTestCase
         $qb
             ->select('u', 'a')
             ->from(CmsUser::class, 'u')
-            ->innerJoin('u.articles', 'a', Join::ON, $qb->expr()->eq('u.id', 'a.author_id'));
+            ->innerJoin(CmsArticle::class, 'a', Join::ON, $qb->expr()->eq('u.id', 'a.author_id'));
 
         $this->assertValidQueryBuilder(
             $qb,
-            'SELECT u, a FROM Doctrine\Tests\Models\CMS\CmsUser u INNER JOIN u.articles a ON u.id = a.author_id',
+            'SELECT u, a FROM Doctrine\Tests\Models\CMS\CmsUser u INNER JOIN Doctrine\Tests\Models\CMS\CmsArticle a ON u.id = a.author_id',
         );
     }
 
@@ -513,7 +514,7 @@ class QueryBuilderTest extends OrmTestCase
         $qb->select('u')
             ->from(CmsUser::class, 'u');
 
-        $criteria = new Criteria();
+        $criteria = defined(Criteria::class . '::ASC') ? Criteria::create(true) : Criteria::create();
         $criteria->where($criteria->expr()->eq('field', 'value'));
 
         $qb->addCriteria($criteria);
@@ -527,7 +528,7 @@ class QueryBuilderTest extends OrmTestCase
         $qb = $this->entityManager->createQueryBuilder();
         $qb->select('alias1')->from(CmsUser::class, 'alias1');
 
-        $criteria = new Criteria();
+        $criteria = defined(Criteria::class . '::ASC') ? Criteria::create(true) : Criteria::create();
         $criteria->where($criteria->expr()->andX(
             $criteria->expr()->eq('field', 'value1'),
             $criteria->expr()->eq('field', 'value2'),
@@ -546,7 +547,7 @@ class QueryBuilderTest extends OrmTestCase
         $qb = $this->entityManager->createQueryBuilder();
         $qb->select('alias1')->from(CmsUser::class, 'alias1');
 
-        $criteria = new Criteria();
+        $criteria = defined(Criteria::class . '::ASC') ? Criteria::create(true) : Criteria::create();
         $criteria->where($criteria->expr()->eq('field', 'value1'));
         $criteria->andWhere($criteria->expr()->gt('field', 'value2'));
 
@@ -563,7 +564,7 @@ class QueryBuilderTest extends OrmTestCase
         $qb = $this->entityManager->createQueryBuilder();
         $qb->select('alias1')->from(CmsUser::class, 'alias1');
 
-        $criteria = new Criteria();
+        $criteria = defined(Criteria::class . '::ASC') ? Criteria::create(true) : Criteria::create();
         $criteria->where($criteria->expr()->eq('field1', 'value1'));
         $criteria->andWhere($criteria->expr()->gt('field2', 'value2'));
 
@@ -580,7 +581,7 @@ class QueryBuilderTest extends OrmTestCase
         $qb = $this->entityManager->createQueryBuilder();
         $qb->select('alias1')->from(CmsUser::class, 'alias1');
 
-        $criteria = new Criteria();
+        $criteria = defined(Criteria::class . '::ASC') ? Criteria::create(true) : Criteria::create();
         $criteria->where($criteria->expr()->eq('field1', 'value1'));
         $criteria->andWhere($criteria->expr()->gt('field2', 'value2'));
 
@@ -597,7 +598,7 @@ class QueryBuilderTest extends OrmTestCase
         $qb = $this->entityManager->createQueryBuilder();
         $qb->select('alias1')->from(CmsUser::class, 'alias1');
 
-        $criteria = new Criteria();
+        $criteria = defined(Criteria::class . '::ASC') ? Criteria::create(true) : Criteria::create();
         $criteria->where($criteria->expr()->eq('field1', 'value1'));
         $criteria->andWhere($criteria->expr()->gt('field1', 'value2'));
 
@@ -614,8 +615,8 @@ class QueryBuilderTest extends OrmTestCase
         $qb->select('u')
             ->from(CmsUser::class, 'u');
 
-        $criteria = new Criteria();
-        $criteria->orderBy(['field' => class_exists(Order::class) ? Order::Descending : Criteria::DESC]);
+        $criteria = defined(Criteria::class . '::ASC') ? Criteria::create(true) : Criteria::create();
+        $criteria->orderBy(['field' => Order::Descending]);
 
         $qb->addCriteria($criteria);
 
@@ -631,8 +632,8 @@ class QueryBuilderTest extends OrmTestCase
             ->from(CmsUser::class, 'u')
             ->join('u.article', 'a');
 
-        $criteria = new Criteria();
-        $criteria->orderBy(['a.field' => class_exists(Order::class) ? Order::Descending : Criteria::DESC]);
+        $criteria = defined(Criteria::class . '::ASC') ? Criteria::create(true) : Criteria::create();
+        $criteria->orderBy(['a.field' => Order::Descending]);
 
         $qb->addCriteria($criteria);
 
@@ -646,7 +647,7 @@ class QueryBuilderTest extends OrmTestCase
         $qb->select('u')
             ->from(CmsUser::class, 'u');
 
-        $criteria = new Criteria();
+        $criteria = defined(Criteria::class . '::ASC') ? Criteria::create(true) : Criteria::create();
         $criteria->setFirstResult(2);
         $criteria->setMaxResults(10);
 
@@ -664,7 +665,7 @@ class QueryBuilderTest extends OrmTestCase
             ->setFirstResult(2)
             ->setMaxResults(10);
 
-        $criteria = new Criteria();
+        $criteria = defined(Criteria::class . '::ASC') ? Criteria::create(true) : Criteria::create();
 
         $qb->addCriteria($criteria);
 
@@ -954,7 +955,7 @@ class QueryBuilderTest extends OrmTestCase
         $qb->select('alias1')->from(CmsUser::class, 'alias1');
         $qb->join('alias1.articles', 'alias2');
 
-        $criteria = new Criteria();
+        $criteria = defined(Criteria::class . '::ASC') ? Criteria::create(true) : Criteria::create();
         $criteria->where($criteria->expr()->eq('field', 'value1'));
         $criteria->andWhere($criteria->expr()->gt('alias2.field', 'value2'));
 
@@ -972,7 +973,7 @@ class QueryBuilderTest extends OrmTestCase
         $qb->select('alias1')->from(CmsUser::class, 'alias1');
         $qb->join('alias1.articles', 'alias2');
 
-        $criteria = new Criteria();
+        $criteria = defined(Criteria::class . '::ASC') ? Criteria::create(true) : Criteria::create();
         $criteria->where($criteria->expr()->eq('alias1.field', 'value1'));
         $criteria->andWhere($criteria->expr()->gt('alias2.field', 'value2'));
 
@@ -990,7 +991,7 @@ class QueryBuilderTest extends OrmTestCase
         $qb->select('alias1')->from(CmsUser::class, 'alias1');
         $qb->join('alias1.articles', 'alias2');
 
-        $criteria = new Criteria();
+        $criteria = defined(Criteria::class . '::ASC') ? Criteria::create(true) : Criteria::create();
         $criteria->where($criteria->expr()->eq('alias1.field', 'value1'));
         $criteria->andWhere($criteria->expr()->gt('alias2.field', 'value2'));
         $criteria->andWhere($criteria->expr()->lt('alias2.field', 'value3'));
@@ -1375,5 +1376,100 @@ class QueryBuilderTest extends OrmTestCase
         };
 
         $qb->test();
+    }
+
+    #[DataProvider('provideHint')]
+    public function testSingleHint(mixed $expected): void
+    {
+        $qb = $this->entityManager->createQueryBuilder()
+            ->delete(CmsUser::class, 'u')
+            ->select('u.id', 'u.username')
+            ->setHint('foo', $expected);
+
+        $this->assertValidQueryBuilder($qb, 'SELECT u.id, u.username FROM Doctrine\Tests\Models\CMS\CmsUser u');
+
+        $query = $qb->getQuery();
+        self::assertTrue($query->hasHint('foo'));
+        self::assertEquals($expected, $query->getHint('foo'));
+    }
+
+    public static function provideHint(): array
+    {
+        return [
+            ['bar'],
+            [new CmsUser()],
+            [['a','b','c']],
+            [1],
+            [true],
+        ];
+    }
+
+    public function testMultipleHints(): void
+    {
+        $object = new CmsUser();
+        $qb     = $this->entityManager->createQueryBuilder()
+            ->delete(CmsUser::class, 'u')
+            ->select('u.id', 'u.username')
+            ->setHint('string', 'bar')
+            ->setHint('object', $object)
+            ->setHint('array', ['a', 'b', 'c'])
+            ->setHint('int', 5)
+            ->setHint('bool', true);
+
+        $this->assertValidQueryBuilder($qb, 'SELECT u.id, u.username FROM Doctrine\Tests\Models\CMS\CmsUser u');
+
+        $query = $qb->getQuery();
+        self::assertTrue($query->hasHint('string'));
+        self::assertTrue($query->hasHint('object'));
+        self::assertTrue($query->hasHint('array'));
+        self::assertTrue($query->hasHint('int'));
+        self::assertTrue($query->hasHint('bool'));
+
+        self::assertEquals('bar', $query->getHint('string'));
+        self::assertInstanceOf(CmsUser::class, $query->getHint('object'));
+        self::assertEquals(['a', 'b', 'c'], $query->getHint('array'));
+        self::assertEquals(5, $query->getHint('int'));
+        self::assertTrue($query->getHint('bool'));
+    }
+
+    public function testHasHint(): void
+    {
+        $qb = $this->entityManager->createQueryBuilder()
+            ->delete(CmsUser::class, 'u')
+            ->select('u.id', 'u.username')
+            ->setHint('foo', 'bar');
+
+        $this->assertValidQueryBuilder($qb, 'SELECT u.id, u.username FROM Doctrine\Tests\Models\CMS\CmsUser u');
+
+        self::assertTrue($qb->hasHint('foo'));
+    }
+
+    public function testGetHint(): void
+    {
+        $qb = $this->entityManager->createQueryBuilder()
+            ->delete(CmsUser::class, 'u')
+            ->select('u.id', 'u.username')
+            ->setHint('foo', 'bar');
+
+        $this->assertValidQueryBuilder($qb, 'SELECT u.id, u.username FROM Doctrine\Tests\Models\CMS\CmsUser u');
+
+        self::assertEquals('bar', $qb->getHint('foo'));
+    }
+
+    public function testGetHints(): void
+    {
+        $object = new CmsUser();
+        $qb     = $this->entityManager->createQueryBuilder()
+            ->delete(CmsUser::class, 'u')
+            ->select('u.id', 'u.username')
+            ->setHint('string', 'bar')
+            ->setHint('object', $object)
+            ->setHint('array', ['a', 'b', 'c'])
+            ->setHint('int', 5)
+            ->setHint('bool', true);
+
+        $this->assertValidQueryBuilder($qb, 'SELECT u.id, u.username FROM Doctrine\Tests\Models\CMS\CmsUser u');
+
+        self::assertCount(5, $qb->getHints('foo'));
     }
 }

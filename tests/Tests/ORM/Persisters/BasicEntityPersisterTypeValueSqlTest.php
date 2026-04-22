@@ -24,6 +24,7 @@ use PHPUnit\Framework\Attributes\Group;
 use ReflectionMethod;
 
 use function array_slice;
+use function defined;
 use function enum_exists;
 
 class BasicEntityPersisterTypeValueSqlTest extends OrmTestCase
@@ -147,10 +148,11 @@ class BasicEntityPersisterTypeValueSqlTest extends OrmTestCase
     }
 
     #[Group('DDC-3056')]
+    #[Group('GH12254')]
     public function testSelectConditionStatementWithMultipleValuesContainingNull(): void
     {
         self::assertEquals(
-            '(t0.id IN (?) OR t0.id IS NULL)',
+            't0.id IS NULL',
             $this->persister->getSelectConditionStatementSQL('id', [null]),
         );
 
@@ -163,6 +165,16 @@ class BasicEntityPersisterTypeValueSqlTest extends OrmTestCase
             '(t0.id IN (?) OR t0.id IS NULL)',
             $this->persister->getSelectConditionStatementSQL('id', [123, null]),
         );
+
+        self::assertEquals(
+            '(t0.id IN (?, ?) OR t0.id IS NULL)',
+            $this->persister->getSelectConditionStatementSQL('id', [123, null, 234]),
+        );
+
+        self::assertEquals(
+            '1=0',
+            $this->persister->getSelectConditionStatementSQL('id', []),
+        );
     }
 
     public function testCountCondition(): void
@@ -174,7 +186,7 @@ class BasicEntityPersisterTypeValueSqlTest extends OrmTestCase
         self::assertEquals('SELECT COUNT(*) FROM "not-a-simple-entity" t0 WHERE t0."simple-entity-value" = ?', $statement);
 
         // Using a criteria object
-        $criteria  = new Criteria(Criteria::expr()->eq('value', 'bar'));
+        $criteria  = (defined(Criteria::class . '::ASC') ? Criteria::create(true) : Criteria::create())->where(Criteria::expr()->eq('value', 'bar'));
         $statement = $persister->getCountSQL($criteria);
         self::assertEquals('SELECT COUNT(*) FROM "not-a-simple-entity" t0 WHERE t0."simple-entity-value" = ?', $statement);
     }

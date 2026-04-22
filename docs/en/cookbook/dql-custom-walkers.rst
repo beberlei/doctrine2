@@ -40,7 +40,8 @@ Now this is all awfully technical, so let me come to some use-cases
 fast to keep you motivated. Using walker implementation you can for
 example:
 
-
+-  Modify the Output walker to get the raw SQL via ``Query->getSQL()``
+   with interpolated parameters.
 -  Modify the AST to generate a Count Query to be used with a
    paginator for any given DQL query.
 -  Modify the Output Walker to generate vendor-specific SQL
@@ -50,7 +51,7 @@ example:
 -  Modify the Output walker to pretty print the SQL for debugging
    purposes.
 
-In this cookbook-entry I will show examples of the first two
+In this cookbook-entry I will show examples of the first three
 points. There are probably much more use-cases.
 
 Generic count query for pagination
@@ -101,8 +102,16 @@ The ``Paginate::count(Query $query)`` looks like:
     {
         static public function count(Query $query)
         {
-            /** @var Query $countQuery */
-            $countQuery = clone $query;
+            /*
+               To avoid changing the $query passed into the method and to make sure a possibly existing
+               ResultSetMapping is discarded, we create a new query object any copy relevant data over.
+            */
+            $countQuery = new Query($query->getEntityManager());
+            $countQuery->setDQL($query->getDQL());
+            $countQuery->setParameters(clone $query->getParameters());
+            foreach ($query->getHints() as $name => $value) {
+                $countQuery->setHint($name, $value);
+            }
 
             $countQuery->setHint(Query::HINT_CUSTOM_TREE_WALKERS, array('DoctrineExtensions\Paginate\CountSqlWalker'));
             $countQuery->setFirstResult(null)->setMaxResults(null);
@@ -111,7 +120,7 @@ The ``Paginate::count(Query $query)`` looks like:
         }
     }
 
-It clones the query, resets the limit clause first and max results
+This resets the limit clause first and max results
 and registers the ``CountSqlWalker`` custom tree walker which
 will modify the AST to execute a count query. The walkers
 implementation is:
@@ -215,3 +224,39 @@ huge benefits with using vendor specific features. This would still
 allow you write DQL queries instead of NativeQueries to make use of
 vendor specific features.
 
+Modifying the Output Walker to get the raw SQL with interpolated parameters
+---------------------------------------------------------------------------
+
+Sometimes we may want to log or trace the raw SQL being generated from its DQL
+for profiling slow queries afterwards or audit queries that changed many rows
+``$query->getSQL()`` will give us the prepared statement being passed to database
+with all values of SQL parameters being replaced by positional ``?`` or named ``:name``
+as parameters are interpolated into prepared statements by the database while executing the SQL.
+``$query->getParameters()`` will give us details about SQL parameters that we've provided.
+So we can create an output walker to interpolate all SQL parameters that will be
+passed into prepared statement in PHP before database handle them internally:
+
+.. literalinclude:: dql-custom-walkers/InterpolateParametersSQLOutputWalker.php
+   :language: php
+
+Then you may get the raw SQL with this output walker:
+
+.. code-block:: php
+
+    <?php
+    $query
+        ->where('t.int IN (:ints)')->setParameter(':ints', [1, 2])
+        ->orWhere('t.string IN (?0)')->setParameter(0, ['3', '4'])
+        ->orWhere("t.bool = ?1")->setParameter('?1', true)
+        ->orWhere("t.string = :string")->setParameter(':string', 'ABC')
+        ->setHint(\Doctrine\ORM\Query::HINT_CUSTOM_OUTPUT_WALKER, InterpolateParametersSQLOutputWalker::class)
+        ->getSQL();
+
+The where clause of the returned SQL should be like:
+
+.. code-block:: sql
+
+    WHERE t0_.int IN (1, 2)
+       OR t0_.string IN ('3', '4')
+       OR t0_.bool = 1
+       OR t0_.string = 'ABC'

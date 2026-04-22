@@ -9,6 +9,10 @@ use Doctrine\DBAL\Platforms\AbstractPlatform;
 use Doctrine\DBAL\Schema\AbstractAsset;
 use Doctrine\DBAL\Schema\AbstractSchemaManager;
 use Doctrine\DBAL\Schema\ComparatorConfig;
+use Doctrine\DBAL\Schema\DefaultExpression;
+use Doctrine\DBAL\Schema\DefaultExpression\CurrentDate;
+use Doctrine\DBAL\Schema\DefaultExpression\CurrentTime;
+use Doctrine\DBAL\Schema\DefaultExpression\CurrentTimestamp;
 use Doctrine\DBAL\Schema\ForeignKeyConstraintEditor;
 use Doctrine\DBAL\Schema\Index;
 use Doctrine\DBAL\Schema\Index\IndexedColumn;
@@ -18,6 +22,8 @@ use Doctrine\DBAL\Schema\NamedObject;
 use Doctrine\DBAL\Schema\PrimaryKeyConstraint;
 use Doctrine\DBAL\Schema\Schema;
 use Doctrine\DBAL\Schema\Table;
+use Doctrine\DBAL\Types\Types;
+use Doctrine\Deprecations\Deprecation;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Mapping\AssociationMapping;
 use Doctrine\ORM\Mapping\ClassMetadata;
@@ -39,14 +45,17 @@ use function array_filter;
 use function array_flip;
 use function array_intersect_key;
 use function array_map;
+use function array_values;
 use function assert;
 use function class_exists;
 use function count;
 use function current;
 use function implode;
 use function in_array;
+use function interface_exists;
 use function is_numeric;
 use function method_exists;
+use function preg_match;
 use function strtolower;
 
 /**
@@ -380,20 +389,16 @@ class SchemaTool
                 }
             }
 
-            if ($eventManager->hasListeners(ToolEvents::postGenerateSchemaTable)) {
-                $eventManager->dispatchEvent(
-                    ToolEvents::postGenerateSchemaTable,
-                    new GenerateSchemaTableEventArgs($class, $schema, $table),
-                );
-            }
-        }
-
-        if ($eventManager->hasListeners(ToolEvents::postGenerateSchema)) {
             $eventManager->dispatchEvent(
-                ToolEvents::postGenerateSchema,
-                new GenerateSchemaEventArgs($this->em, $schema),
+                ToolEvents::postGenerateSchemaTable,
+                new GenerateSchemaTableEventArgs($class, $schema, $table),
             );
         }
+
+        $eventManager->dispatchEvent(
+            ToolEvents::postGenerateSchema,
+            new GenerateSchemaEventArgs($this->em, $schema),
+        );
 
         return $schema;
     }
@@ -476,7 +481,9 @@ class SchemaTool
             $options['scale'] = $mapping->scale;
         }
 
+        /** @phpstan-ignore property.deprecated */
         if (isset($mapping->default)) {
+            /** @phpstan-ignore property.deprecated */
             $options['default'] = $mapping->default;
         }
 
@@ -486,6 +493,64 @@ class SchemaTool
 
         // the 'default' option can be overwritten here
         $options = $this->gatherColumnOptions($mapping) + $options;
+
+        if (isset($options['default']) && interface_exists(DefaultExpression::class)) {
+            if (
+                in_array($mapping->type, [
+                    Types::DATETIME_MUTABLE,
+                    Types::DATETIME_IMMUTABLE,
+                    Types::DATETIMETZ_MUTABLE,
+                    Types::DATETIMETZ_IMMUTABLE,
+                ], true)
+                && $options['default'] === $this->platform->getCurrentTimestampSQL()
+            ) {
+                Deprecation::trigger(
+                    'doctrine/orm',
+                    'https://github.com/doctrine/orm/issues/12252',
+                    <<<'DEPRECATION'
+                    Using "%s" as a default value for datetime fields is deprecated and
+                    will not be supported in Doctrine ORM 4.0.
+                    Pass a `Doctrine\DBAL\Schema\DefaultExpression\CurrentTimestamp` instance instead.
+                    DEPRECATION,
+                    $this->platform->getCurrentTimestampSQL(),
+                );
+                $options['default'] = new CurrentTimestamp();
+            }
+
+            if (
+                in_array($mapping->type, [Types::TIME_MUTABLE, Types::TIME_IMMUTABLE], true)
+                && $options['default'] === $this->platform->getCurrentTimeSQL()
+            ) {
+                Deprecation::trigger(
+                    'doctrine/orm',
+                    'https://github.com/doctrine/orm/issues/12252',
+                    <<<'DEPRECATION'
+                    Using "%s" as a default value for time fields is deprecated and
+                    will not be supported in Doctrine ORM 4.0.
+                    Pass a `Doctrine\DBAL\Schema\DefaultExpression\CurrentTime` instance instead.
+                    DEPRECATION,
+                    $this->platform->getCurrentTimeSQL(),
+                );
+                $options['default'] = new CurrentTime();
+            }
+
+            if (
+                in_array($mapping->type, [Types::DATE_MUTABLE, Types::DATE_IMMUTABLE], true)
+                && $options['default'] === $this->platform->getCurrentDateSQL()
+            ) {
+                Deprecation::trigger(
+                    'doctrine/orm',
+                    'https://github.com/doctrine/orm/issues/12252',
+                    <<<'DEPRECATION'
+                    Using "%s" as a default value for date fields is deprecated and
+                    will not be supported in Doctrine ORM 4.0.
+                    Pass a `Doctrine\DBAL\Schema\DefaultExpression\CurrentDate` instance instead.
+                    DEPRECATION,
+                    $this->platform->getCurrentDateSQL(),
+                );
+                $options['default'] = new CurrentDate();
+            }
+        }
 
         if ($class->isIdGeneratorIdentity() && $class->getIdentifierFieldNames() === [$mapping->fieldName]) {
             $options['autoincrement'] = true;
@@ -971,20 +1036,26 @@ class SchemaTool
         }
     }
 
-    /** @param string[] $primaryKeyColumns */
+    /** @param non-empty-array<non-empty-string> $primaryKeyColumns */
     private function addPrimaryKeyConstraint(Table $table, array $primaryKeyColumns): void
     {
-        if (class_exists(PrimaryKeyConstraint::class)) {
-            $primaryKeyColumnNames = [];
+        if (! class_exists(PrimaryKeyConstraint::class)) {
+            $table->setPrimaryKey(array_values($primaryKeyColumns));
 
-            foreach ($primaryKeyColumns as $primaryKeyColumn) {
+            return;
+        }
+
+        $primaryKeyColumnNames = [];
+
+        foreach ($primaryKeyColumns as $primaryKeyColumn) {
+            if (preg_match('/^"(.+)"$/', $primaryKeyColumn, $matches) === 1) {
+                $primaryKeyColumnNames[] = new UnqualifiedName(Identifier::quoted($matches[1]));
+            } else {
                 $primaryKeyColumnNames[] = new UnqualifiedName(Identifier::unquoted($primaryKeyColumn));
             }
-
-            $table->addPrimaryKeyConstraint(new PrimaryKeyConstraint(null, $primaryKeyColumnNames, true));
-        } else {
-            $table->setPrimaryKey($primaryKeyColumns);
         }
+
+        $table->addPrimaryKeyConstraint(new PrimaryKeyConstraint(null, $primaryKeyColumnNames, true));
     }
 
     /** @return string[] */
@@ -1001,7 +1072,7 @@ class SchemaTool
     {
         return $asset instanceof NamedObject
             ? $asset->getObjectName()->toString()
-            // DBAL < 4.4
+            // @phpstan-ignore method.deprecated (DBAL < 4.4)
             : $asset->getName();
     }
 }

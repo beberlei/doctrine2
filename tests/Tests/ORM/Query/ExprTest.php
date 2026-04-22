@@ -374,9 +374,25 @@ class ExprTest extends OrmTestCase
 
     public function testAddThrowsException(): void
     {
-        $this->expectException(InvalidArgumentException::class);
         $orExpr = $this->expr->orX();
+        $this->expectException(InvalidArgumentException::class);
         $orExpr->add($this->expr->quot(5, 2));
+    }
+
+    #[DataProvider('provideInvalidTypesForAdd')]
+    public function testAddThrowsExceptionOnInvalidType(mixed $arg): void
+    {
+        $orExpr = $this->expr->orX();
+        $this->expectException(InvalidArgumentException::class);
+        $orExpr->add($arg);
+    }
+
+    /** @return Generator<string, array{mixed}> */
+    public static function provideInvalidTypesForAdd(): Generator
+    {
+        yield 'integer 1' => [1];
+        yield 'object' => [(object) ['foo' => 'bar']];
+        yield 'array' => [['foo' => 'bar']];
     }
 
     #[Group('DDC-1683')]
@@ -415,9 +431,9 @@ class ExprTest extends OrmTestCase
         self::assertEquals(['foo DESC', 'bar ASC'], $group->getParts());
 
         // Join
-        $join = new Join(Join::INNER_JOIN, 'f.bar', 'b', Join::ON, 'b.bar_id = 1', 'b.bar_id');
+        $join = new Join(Join::INNER_JOIN, 'f.bar', 'b', Join::WITH, 'b.bar_id = 1', 'b.bar_id');
         self::assertEquals(Join::INNER_JOIN, $join->getJoinType());
-        self::assertEquals(Join::ON, $join->getConditionType());
+        self::assertEquals(Join::WITH, $join->getConditionType());
         self::assertEquals('b.bar_id = 1', $join->getCondition());
         self::assertEquals('b.bar_id', $join->getIndexBy());
         self::assertEquals('f.bar', $join->getJoin());

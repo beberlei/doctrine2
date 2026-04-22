@@ -8,7 +8,7 @@ use BackedEnum;
 use DateTimeInterface;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
-use Doctrine\Common\EventManager;
+use Doctrine\Common\EventDispatcher;
 use Doctrine\DBAL;
 use Doctrine\DBAL\Connections\PrimaryReadReplicaConnection;
 use Doctrine\DBAL\LockMode;
@@ -262,9 +262,9 @@ class UnitOfWork implements PropertyChangedListener
     private array $collectionPersisters = [];
 
     /**
-     * The EventManager used for dispatching events.
+     * The EventDispatcher used for dispatching events.
      */
-    private readonly EventManager $evm;
+    private readonly EventDispatcher $eventDispatcher;
 
     /**
      * The ListenersInvoker used for dispatching events.
@@ -324,7 +324,7 @@ class UnitOfWork implements PropertyChangedListener
     public function __construct(
         private readonly EntityManagerInterface $em,
     ) {
-        $this->evm                      = $em->getEventManager();
+        $this->eventDispatcher          = $em->getEventManager();
         $this->listenersInvoker         = new ListenersInvoker($em);
         $this->hasCache                 = $em->getConfiguration()->isSecondLevelCacheEnabled();
         $this->identifierFlattener      = new IdentifierFlattener($this, $em->getMetadataFactory());
@@ -354,10 +354,7 @@ class UnitOfWork implements PropertyChangedListener
             $connection->ensureConnectedToPrimary();
         }
 
-        // Raise preFlush
-        if ($this->evm->hasListeners(Events::preFlush)) {
-            $this->evm->dispatchEvent(Events::preFlush, new PreFlushEventArgs($this->em));
-        }
+        $this->dispatchPreFlushEvent();
 
         // Compute changes done since last commit.
         $this->computeChangeSets();
@@ -388,8 +385,7 @@ class UnitOfWork implements PropertyChangedListener
 
         $this->dispatchOnFlushEvent();
 
-        $conn = $this->em->getConnection();
-        $conn->beginTransaction();
+        $connection->beginTransaction();
 
         $successful = false;
 
@@ -440,7 +436,7 @@ class UnitOfWork implements PropertyChangedListener
 
             $commitFailed = false;
             try {
-                if ($conn->commit() === false) {
+                if ($connection->commit() === false) {
                     $commitFailed = true;
                 }
             } catch (DBAL\Exception $e) {
@@ -456,8 +452,8 @@ class UnitOfWork implements PropertyChangedListener
             if (! $successful) {
                 $this->em->close();
 
-                if ($conn->isTransactionActive()) {
-                    $conn->rollBack();
+                if ($connection->isTransactionActive()) {
+                    $connection->rollBack();
                 }
 
                 $this->afterTransactionRolledBack();
@@ -2310,9 +2306,7 @@ class UnitOfWork implements PropertyChangedListener
         $this->eagerLoadingCollections          =
         $this->orphanRemovals                   = [];
 
-        if ($this->evm->hasListeners(Events::onClear)) {
-            $this->evm->dispatchEvent(Events::onClear, new OnClearEventArgs($this->em));
-        }
+        $this->eventDispatcher->dispatchEvent(Events::onClear, new OnClearEventArgs($this->em));
     }
 
     /**
@@ -2677,8 +2671,14 @@ class UnitOfWork implements PropertyChangedListener
                     $reflField->setValue($entity, $pColl);
 
                     if ($hints['fetchMode'][$class->name][$field] === ClassMetadata::FETCH_EAGER) {
-                        $isIteration = isset($hints[Query::HINT_INTERNAL_ITERATION]) && $hints[Query::HINT_INTERNAL_ITERATION];
-                        if (! $isIteration && $assoc->isOneToMany() && ! $targetClass->isIdentifierComposite && ! $assoc->isIndexed()) {
+                        if (
+                            $assoc->isOneToMany()
+                            // is iteration
+                            && ! (isset($hints[Query::HINT_INTERNAL_ITERATION]) && $hints[Query::HINT_INTERNAL_ITERATION])
+                            // is foreign key composite
+                            && ! ($targetClass->hasAssociation($assoc->mappedBy) && count($targetClass->getAssociationMapping($assoc->mappedBy)->joinColumns) > 1)
+                            && ! $assoc->isIndexed()
+                        ) {
                             $this->scheduleCollectionForBatchLoading($pColl, $class);
                         } else {
                             $this->loadCollection($pColl);
@@ -3223,18 +3223,19 @@ class UnitOfWork implements PropertyChangedListener
         }
     }
 
+    private function dispatchPreFlushEvent(): void
+    {
+        $this->eventDispatcher->dispatchEvent(Events::preFlush, new PreFlushEventArgs($this->em));
+    }
+
     private function dispatchOnFlushEvent(): void
     {
-        if ($this->evm->hasListeners(Events::onFlush)) {
-            $this->evm->dispatchEvent(Events::onFlush, new OnFlushEventArgs($this->em));
-        }
+        $this->eventDispatcher->dispatchEvent(Events::onFlush, new OnFlushEventArgs($this->em));
     }
 
     private function dispatchPostFlushEvent(): void
     {
-        if ($this->evm->hasListeners(Events::postFlush)) {
-            $this->evm->dispatchEvent(Events::postFlush, new PostFlushEventArgs($this->em));
-        }
+        $this->eventDispatcher->dispatchEvent(Events::postFlush, new PostFlushEventArgs($this->em));
     }
 
     /**

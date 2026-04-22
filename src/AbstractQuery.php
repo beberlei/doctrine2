@@ -18,7 +18,6 @@ use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Mapping\MappingException as ORMMappingException;
 use Doctrine\ORM\Proxy\DefaultProxyClassNameResolver;
 use Doctrine\ORM\Query\Parameter;
-use Doctrine\ORM\Query\QueryException;
 use Doctrine\ORM\Query\ResultSetMapping;
 use Doctrine\Persistence\Mapping\MappingException;
 use LogicException;
@@ -865,10 +864,6 @@ abstract class AbstractQuery
             throw new LogicException('Uninitialized result set mapping.');
         }
 
-        if ($rsm->isMixed && count($rsm->scalarMappings) > 0) {
-            throw QueryException::iterateWithMixedResultNotAllowed();
-        }
-
         $stmt = $this->_doExecute();
 
         return $this->em->newHydrator($this->hydrationMode)->toIterable($stmt, $rsm, $this->hints);
@@ -1070,7 +1065,7 @@ abstract class AbstractQuery
     }
 
     /**
-     * Executes the query and returns a the resulting Statement object.
+     * Executes the query and returns the resulting Statement object.
      *
      * @return Result|int The executed database statement that holds
      *                    the results, or an integer indicating how
