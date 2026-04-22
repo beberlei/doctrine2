@@ -129,6 +129,19 @@ class FieldBuilder
     }
 
     /**
+     * Marks the field as lazy-loaded (excluded from initial SELECT, loaded on first access).
+     * Requires PHP 8.4 native lazy objects to be enabled.
+     *
+     * @return $this
+     */
+    public function lazy(): static
+    {
+        $this->mapping['lazy'] = true;
+
+        return $this;
+    }
+
+    /**
      * Sets scale.
      *
      * @return $this

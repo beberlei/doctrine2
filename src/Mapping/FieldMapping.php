@@ -44,6 +44,8 @@ final class FieldMapping implements ArrayAccess
     public bool|null $unique = null;
     /** Whether an index should be generated for the column. */
     public bool|null $index = null;
+    /** Whether this field should be loaded lazily on first access (requires PHP 8.4 native lazy objects). */
+    public bool|null $lazy = null;
     /**
      * @var class-string|null This is set when the field is inherited by this
      * class from another (inheritance) parent <em>entity</em> class. The value
@@ -142,7 +144,7 @@ final class FieldMapping implements ArrayAccess
     {
         $serialized = ['type', 'fieldName', 'columnName'];
 
-        foreach (['nullable', 'notInsertable', 'notUpdatable', 'id', 'unique', 'version', 'quoted', 'index'] as $boolKey) {
+        foreach (['nullable', 'notInsertable', 'notUpdatable', 'id', 'unique', 'version', 'quoted', 'index', 'lazy'] as $boolKey) {
             if ($this->$boolKey) {
                 $serialized[] = $boolKey;
             }

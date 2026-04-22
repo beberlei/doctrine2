@@ -190,6 +190,15 @@ Optional parameters:
    included when updating the row of the underlying entities table.
    If not specified, default value is true.
 
+-  **lazy** (requires PHP 8.4 with native lazy objects enabled): Boolean
+   value to mark the column as a lazy field. When ``true``, the column is
+   excluded from the initial ``SELECT`` when loading the entity, and its
+   value is fetched transparently on first access via a separate query.
+   This is useful for large columns (e.g. ``TEXT``, ``BLOB``) that are
+   rarely needed. Lazy fields must not be identifier fields, version
+   fields, or embedded fields. If not specified, default value is
+   ``false``. See :ref:`reference-lazy-fields`.
+
 -  **generated**: An enum with the possible values ALWAYS, INSERT, NEVER.  Is
    used after an INSERT or UPDATE statement to determine if the database
    generated this value and it needs to be fetched using a SELECT statement.

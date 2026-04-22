@@ -715,4 +715,31 @@ EXCEPTION
             $entityName,
         ));
     }
+
+    public static function lazyFieldMustNotBeIdentifier(string $entityName, string $fieldName): self
+    {
+        return new self(sprintf(
+            'Field "%s#%s" is marked as lazy but is also an identifier. Identifier fields cannot be lazy.',
+            $entityName,
+            $fieldName,
+        ));
+    }
+
+    public static function lazyFieldMustNotBeVersionField(string $entityName, string $fieldName): self
+    {
+        return new self(sprintf(
+            'Field "%s#%s" is marked as lazy but is also a version field. Version fields cannot be lazy.',
+            $entityName,
+            $fieldName,
+        ));
+    }
+
+    public static function lazyFieldMustNotBeEmbedded(string $entityName, string $fieldName): self
+    {
+        return new self(sprintf(
+            'Field "%s#%s" is marked as lazy but belongs to an embeddable. Embedded fields cannot be lazy.',
+            $entityName,
+            $fieldName,
+        ));
+    }
 }

@@ -34,12 +34,17 @@ class SingleTablePersister extends AbstractEntityInheritancePersister
 
     protected function getSelectColumnsSQL(): string
     {
-        $columnList = [];
         if ($this->currentPersisterContext->selectColumnListSql !== null && $this->isFilterHashUpToDate()) {
             return $this->currentPersisterContext->selectColumnListSql;
         }
 
-        $columnList[] = parent::getSelectColumnsSQL();
+        // parent::getSelectColumnsSQL() populates both selectColumnListSql and lazySelectColumnListSql
+        // for the root entity fields. We build on top of those here.
+        $parentColumnList     = parent::getSelectColumnsSQL();
+        $parentLazyColumnList = $this->currentPersisterContext->lazySelectColumnListSql ?? $parentColumnList;
+
+        $columnList     = [$parentColumnList];
+        $lazyColumnList = [$parentLazyColumnList];
 
         $rootClass  = $this->em->getClassMetadata($this->class->rootEntityName);
         $tableAlias = $this->getSQLTableAlias($rootClass->name);
@@ -49,7 +54,9 @@ class SingleTablePersister extends AbstractEntityInheritancePersister
         $discrColumnName = $discrColumn->name;
         $discrColumnType = $discrColumn->type;
 
-        $columnList[] = $tableAlias . '.' . $discrColumnName;
+        $discrSql         = $tableAlias . '.' . $discrColumnName;
+        $columnList[]     = $discrSql;
+        $lazyColumnList[] = $discrSql; // discriminator always present
 
         $resultColumnName = $this->getSQLResultCasing($this->platform, $discrColumnName);
 
@@ -66,7 +73,11 @@ class SingleTablePersister extends AbstractEntityInheritancePersister
                     continue;
                 }
 
-                $columnList[] = $this->getSelectColumnSQL($fieldName, $subClass);
+                $columnSQL    = $this->getSelectColumnSQL($fieldName, $subClass);
+                $columnList[] = $columnSQL;
+                if (! ($mapping->lazy ?? false)) {
+                    $lazyColumnList[] = $columnSQL;
+                }
             }
 
             // Foreign key columns
@@ -78,17 +89,20 @@ class SingleTablePersister extends AbstractEntityInheritancePersister
                 $targetClass = $this->em->getClassMetadata($assoc->targetEntity);
 
                 foreach ($assoc->joinColumns as $joinColumn) {
-                    $columnList[] = $this->getSelectJoinColumnSQL(
+                    $joinColumnSQL    = $this->getSelectJoinColumnSQL(
                         $tableAlias,
                         $joinColumn->name,
                         $this->quoteStrategy->getJoinColumnName($joinColumn, $subClass, $this->platform),
                         PersisterHelper::getTypeOfColumn($joinColumn->referencedColumnName, $targetClass, $this->em),
                     );
+                    $columnList[]     = $joinColumnSQL;
+                    $lazyColumnList[] = $joinColumnSQL;
                 }
             }
         }
 
-        $this->currentPersisterContext->selectColumnListSql = implode(', ', $columnList);
+        $this->currentPersisterContext->selectColumnListSql     = implode(', ', $columnList);
+        $this->currentPersisterContext->lazySelectColumnListSql = implode(', ', $lazyColumnList);
         $this->updateFilterHash();
 
         return $this->currentPersisterContext->selectColumnListSql;
