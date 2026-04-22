@@ -858,6 +858,10 @@ class XmlDriver extends FileDriver
             $mapping['enumType'] = (string) $fieldMapping['enum-type'];
         }
 
+        if (isset($fieldMapping['lazy']) && $this->evaluateBoolean($fieldMapping['lazy'])) {
+            $mapping['lazy'] = true;
+        }
+
         if (isset($fieldMapping->options)) {
             $mapping['options'] = $this->parseOptions($fieldMapping->options->children());
         }

@@ -256,6 +256,7 @@
     <xs:attribute name="index" type="xs:boolean" default="false" />
     <xs:attribute name="insertable" type="xs:boolean" default="true" />
     <xs:attribute name="updatable" type="xs:boolean" default="true" />
+    <xs:attribute name="lazy" type="xs:boolean" default="false" />
     <xs:attribute name="generated" type="orm:generated-type" default="NEVER" />
     <xs:attribute name="enum-type" type="xs:string" />
     <xs:attribute name="version" type="xs:boolean" />
