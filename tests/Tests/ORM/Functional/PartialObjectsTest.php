@@ -10,6 +10,7 @@ use Doctrine\Tests\OrmFunctionalTestCase;
 
 use function array_key_exists;
 use function array_keys;
+use function sprintf;
 
 class PartialObjectsTest extends OrmFunctionalTestCase
 {
@@ -65,5 +66,35 @@ class PartialObjectsTest extends OrmFunctionalTestCase
         $originalData = $this->_em->getUnitOfWork()->getOriginalEntityData($user);
         $this->assertTrue(array_key_exists('name', $originalData));
         $this->assertEquals('Alice', $originalData['name']);
+    }
+
+    public function testPartialObjectLazyInitDoesNotOverwriteChangedProperty(): void
+    {
+        $user           = new CmsUser();
+        $user->name     = 'Alice';
+        $user->username = 'alice';
+        $user->status   = 'developer';
+
+        $this->_em->persist($user);
+        $this->_em->flush();
+        $this->_em->clear();
+
+        $dql  = 'SELECT PARTIAL u.{id, name} FROM ' . CmsUser::class . ' u WHERE u.username = ?1';
+        $user = $this->_em->createQuery($dql)->setParameter(1, 'alice')->getSingleResult();
+
+        // Change the partially-loaded property before lazy init fires.
+        $user->name = 'Bob';
+
+        // Writing to a loaded property must NOT trigger lazy init —
+        // 'name' was already loaded by the partial query, so the ghost
+        // should remain uninitialized at this point.
+        self::assertTrue($this->_em->getUnitOfWork()->isUninitializedObject($user));
+
+        // Reading a non-loaded property triggers the lazy ghost initializer.
+        // The full DB load must NOT overwrite the in-memory change to 'name'.
+        $username = $user->username;
+
+        self::assertEquals('Bob', $user->name);
+        self::assertEquals('alice', $username);
     }
 }
