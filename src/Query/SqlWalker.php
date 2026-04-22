@@ -1392,12 +1392,18 @@ class SqlWalker
     {
         $class = $this->getMetadataForDqlAlias($dqlAlias);
 
+        // Auto-skip lazy fields when native lazy objects are enabled and no explicit partial
+        // field set is provided. An explicit PARTIAL clause overrides lazy field behaviour
+        // because the user consciously listed every field they want.
+        $nativeLazyEnabled = $this->em->getConfiguration()->isNativeLazyObjectsEnabled();
+        $hasLazyFields     = $nativeLazyEnabled && $class->lazyFields !== [];
+
         if (! isset($this->selectedClasses[$dqlAlias])) {
             $this->selectedClasses[$dqlAlias] = [
                 'class'       => $class,
                 'dqlAlias'    => $dqlAlias,
                 'resultAlias' => $resultAlias,
-                'partial'     => $partialFieldSet !== [],
+                'partial'     => $partialFieldSet !== [] || $hasLazyFields,
             ];
         }
 
@@ -1406,6 +1412,11 @@ class SqlWalker
         // Select all fields from the queried class
         foreach ($class->fieldMappings as $fieldName => $mapping) {
             if ($partialFieldSet && ! in_array($fieldName, $partialFieldSet, true)) {
+                continue;
+            }
+
+            // Skip lazy fields unless they are explicitly listed in a PARTIAL clause
+            if (! $partialFieldSet && ($mapping->lazy ?? false) && $nativeLazyEnabled) {
                 continue;
             }
 
@@ -1446,6 +1457,10 @@ class SqlWalker
 
                 foreach ($subClass->fieldMappings as $fieldName => $mapping) {
                     if (isset($mapping->inherited) || ($partialFieldSet && ! in_array($fieldName, $partialFieldSet, true))) {
+                        continue;
+                    }
+
+                    if (! $partialFieldSet && ($mapping->lazy ?? false) && $nativeLazyEnabled) {
                         continue;
                     }
 
