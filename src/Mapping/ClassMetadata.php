@@ -351,6 +351,15 @@ class ClassMetadata implements PersistenceClassMetadata, Stringable
     public array $fieldMappings = [];
 
     /**
+     * READ-ONLY: List of field names that are marked as lazy-loaded.
+     * Lazy fields are excluded from the initial SELECT and loaded on first access
+     * when PHP 8.4 native lazy objects are enabled.
+     *
+     * @var list<string>
+     */
+    public array $lazyFields = [];
+
+    /**
      * READ-ONLY: An array of field names. Used to look up field names from column names.
      * Keys are column names and values are field names.
      *
@@ -805,6 +814,10 @@ class ClassMetadata implements PersistenceClassMetadata, Stringable
 
         if ($this->requiresFetchAfterChange) {
             $serialized[] = 'requiresFetchAfterChange';
+        }
+
+        if ($this->lazyFields !== []) {
+            $serialized[] = 'lazyFields';
         }
 
         return $serialized;
@@ -1275,6 +1288,20 @@ class ClassMetadata implements PersistenceClassMetadata, Stringable
                 && ! isset($mapping->options['values'])
             ) {
                 $mapping->options['values'] = array_column($mapping->enumType::cases(), 'value');
+            }
+        }
+
+        if ($mapping->lazy) {
+            if (! empty($mapping->id)) {
+                throw MappingException::lazyFieldMustNotBeIdentifier($this->name, $mapping->fieldName);
+            }
+
+            if ($mapping->fieldName === $this->versionField) {
+                throw MappingException::lazyFieldMustNotBeVersionField($this->name, $mapping->fieldName);
+            }
+
+            if ($mapping->declaredField !== null) {
+                throw MappingException::lazyFieldMustNotBeEmbedded($this->name, $mapping->fieldName);
             }
         }
 
@@ -1940,6 +1967,10 @@ class ClassMetadata implements PersistenceClassMetadata, Stringable
             $this->requiresFetchAfterChange = true;
         }
 
+        if ($mapping->lazy) {
+            $this->lazyFields[] = $mapping->fieldName;
+        }
+
         $this->fieldMappings[$mapping->fieldName] = $mapping;
     }
 
@@ -1975,6 +2006,10 @@ class ClassMetadata implements PersistenceClassMetadata, Stringable
 
         if (isset($fieldMapping->generated)) {
             $this->requiresFetchAfterChange = true;
+        }
+
+        if ($fieldMapping->lazy && ! in_array($fieldMapping->fieldName, $this->lazyFields, true)) {
+            $this->lazyFields[] = $fieldMapping->fieldName;
         }
     }
 
