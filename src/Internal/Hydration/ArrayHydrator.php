@@ -29,9 +29,6 @@ class ArrayHydrator extends AbstractHydrator
     /** @var mixed[] */
     private array $resultPointers = [];
 
-    /** @var array<string,string> */
-    private array $idTemplate = [];
-
     private int $resultCounter = 0;
 
     #[Override]
@@ -52,25 +49,23 @@ class ArrayHydrator extends AbstractHydrator
     #[Override]
     protected function hydrateAllData(): array
     {
-        $result = [];
-
         while ($data = $this->statement()->fetchAssociative()) {
-            $this->hydrateRowData($data, $result);
+            $this->hydrateRowData($data);
         }
 
-        return $result;
+        return $this->takeResult();
     }
 
     /**
      * {@inheritDoc}
      */
     #[Override]
-    protected function hydrateRowData(array $row, array &$result): void
+    protected function hydrateRowData(array $row): void
     {
         // 1) Initialize
-        $id                 = $this->idTemplate; // initialize the id-memory
-        $nonemptyComponents = [];
-        $rowData            = $this->gatherRowData($row, $id, $nonemptyComponents);
+        $rowData            = $this->gatherRowData($row);
+        $id                 = $this->rowId;
+        $nonemptyComponents = $this->nonemptyComponents;
 
         // 2) Now hydrate the data found in the current row.
         foreach ($rowData['data'] as $dqlAlias => $data) {
@@ -156,7 +151,7 @@ class ArrayHydrator extends AbstractHydrator
 
                 // if this row has a NULL value for the root result id then make it a null result.
                 if (! isset($nonemptyComponents[$dqlAlias])) {
-                    $result[] = $this->resultSetMapping()->isMixed
+                    $this->result[] = $this->resultSetMapping()->isMixed
                         ? [$entityKey => null]
                         : null;
 
@@ -173,11 +168,11 @@ class ArrayHydrator extends AbstractHydrator
                         : $data;
 
                     if (isset($this->resultSetMapping()->indexByMap[$dqlAlias])) {
-                        $resultKey          = $row[$this->resultSetMapping()->indexByMap[$dqlAlias]];
-                        $result[$resultKey] = $element;
+                        $resultKey                = $row[$this->resultSetMapping()->indexByMap[$dqlAlias]];
+                        $this->result[$resultKey] = $element;
                     } else {
-                        $resultKey = $this->resultCounter;
-                        $result[]  = $element;
+                        $resultKey      = $this->resultCounter;
+                        $this->result[] = $element;
 
                         ++$this->resultCounter;
                     }
@@ -188,7 +183,7 @@ class ArrayHydrator extends AbstractHydrator
                     $resultKey = $index;
                 }
 
-                $this->updateResultPointer($result, $index, $dqlAlias, false);
+                $this->updateResultPointer($this->result, $index, $dqlAlias, false);
             }
         }
 
@@ -206,7 +201,7 @@ class ArrayHydrator extends AbstractHydrator
             }
 
             foreach ($rowData['scalars'] as $name => $value) {
-                $result[$resultKey][$name] = $value;
+                $this->result[$resultKey][$name] = $value;
             }
         }
 
@@ -223,12 +218,12 @@ class ArrayHydrator extends AbstractHydrator
                 $obj  = $newObject['obj'];
 
                 if (count($args) === $scalarCount || ($scalarCount === 0 && count($rowData['newObjects']) === 1)) {
-                    $result[$resultKey] = $obj;
+                    $this->result[$resultKey] = $obj;
 
                     continue;
                 }
 
-                $result[$resultKey][$objIndex] = $obj;
+                $this->result[$resultKey][$objIndex] = $obj;
             }
         }
     }

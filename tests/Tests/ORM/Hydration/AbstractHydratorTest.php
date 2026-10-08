@@ -91,6 +91,56 @@ class AbstractHydratorTest extends OrmFunctionalTestCase
         self::assertFalse($this->eventManager->hasListeners(Events::onClear));
     }
 
+    public function testHydrateAllReturnsRowResultsAndResetsState(): void
+    {
+        $hydrator = new RowStateHydrator($this->_em);
+
+        $result = $hydrator->hydrateAll($this->createRowsResult([['v' => 1], ['v' => 2]]), $this->mockResultMapping);
+
+        self::assertSame([1, 2], $result);
+        self::assertSame(RowStateHydrator::EMPTY_STATE, $hydrator->state());
+    }
+
+    public function testToIterableYieldsEachRowResultAndResetsState(): void
+    {
+        $hydrator = new RowStateHydrator($this->_em);
+        $states   = [];
+
+        foreach ($hydrator->toIterable($this->createRowsResult([['v' => 1], ['v' => 2]]), $this->mockResultMapping) as $value) {
+            $states[$value] = $hydrator->state();
+        }
+
+        self::assertSame([
+            1 => ['result' => [], 'idTemplate' => ['a' => ''], 'rowId' => ['a' => '|1'], 'nonemptyComponents' => ['a' => true]],
+            2 => ['result' => [], 'idTemplate' => ['a' => ''], 'rowId' => ['a' => '|2'], 'nonemptyComponents' => ['a' => true]],
+        ], $states);
+        self::assertSame(RowStateHydrator::EMPTY_STATE, $hydrator->state());
+    }
+
+    public function testHydrateAllResetsStateEvenOnError(): void
+    {
+        $hydrator = new RowStateHydrator($this->_em);
+
+        try {
+            $hydrator->hydrateAll($this->createRowsResult([['v' => 1], ['v' => 'fail']]), $this->mockResultMapping);
+            self::fail('Expected LogicException');
+        } catch (LogicException) {
+        }
+
+        self::assertSame(RowStateHydrator::EMPTY_STATE, $hydrator->state());
+    }
+
+    /** @param list<array<string, mixed>> $rows */
+    private function createRowsResult(array $rows): Result&Stub
+    {
+        $result = $this->createStub(Result::class);
+        $result
+            ->method('fetchAssociative')
+            ->willReturn(...[...$rows, false]);
+
+        return $result;
+    }
+
     public function testEnumCastsIntegerBackedEnumValues(): void
     {
         $accessLevel = $this->hydrator->buildEnumForTesting('2', AccessLevel::class);
@@ -162,5 +212,48 @@ class DummyHydrator extends AbstractHydrator
     public function prepare(): void
     {
         $this->hasListener = $this->em->getEventManager()->hasListeners(Events::onClear);
+    }
+}
+
+class RowStateHydrator extends AbstractHydrator
+{
+    public const array EMPTY_STATE = ['result' => [], 'idTemplate' => [], 'rowId' => [], 'nonemptyComponents' => []];
+
+    /** @return array{result: mixed[], idTemplate: array<string, string>, rowId: array<string, string>, nonemptyComponents: array<string, bool>} */
+    public function state(): array
+    {
+        return [
+            'result' => $this->result,
+            'idTemplate' => $this->idTemplate,
+            'rowId' => $this->rowId,
+            'nonemptyComponents' => $this->nonemptyComponents,
+        ];
+    }
+
+    protected function prepare(): void
+    {
+        $this->idTemplate = ['a' => ''];
+    }
+
+    /** @return mixed[] */
+    protected function hydrateAllData(): array
+    {
+        while ($row = $this->statement()->fetchAssociative()) {
+            $this->hydrateRowData($row);
+        }
+
+        return $this->takeResult();
+    }
+
+    /** @param mixed[] $row */
+    protected function hydrateRowData(array $row): void
+    {
+        if ($row['v'] === 'fail') {
+            throw new LogicException();
+        }
+
+        $this->rowId              = ['a' => $this->idTemplate['a'] . '|' . $row['v']];
+        $this->nonemptyComponents = ['a' => true];
+        $this->result[]           = $row['v'];
     }
 }
