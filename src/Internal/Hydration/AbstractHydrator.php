@@ -276,7 +276,7 @@ abstract class AbstractHydrator
      *
      * @return mixed[]
      */
-    final protected function takeResult(): array
+    protected function takeResult(): array
     {
         $result       = $this->result;
         $this->result = [];

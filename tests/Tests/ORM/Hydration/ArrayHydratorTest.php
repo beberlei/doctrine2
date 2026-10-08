@@ -991,6 +991,101 @@ class ArrayHydratorTest extends HydrationTestCase
         self::assertNull($result[2]['ctopic']);
     }
 
+    private function createUserArticleCommentResultSetMapping(): ResultSetMapping
+    {
+        $rsm = new ResultSetMapping();
+
+        $rsm->addEntityResult(CmsUser::class, 'u');
+        $rsm->addJoinedEntityResult(CmsArticle::class, 'a', 'u', 'articles');
+        $rsm->addJoinedEntityResult(CmsComment::class, 'c', 'a', 'comments');
+        $rsm->addFieldResult('u', 'u__id', 'id');
+        $rsm->addFieldResult('u', 'u__status', 'status');
+        $rsm->addFieldResult('a', 'a__id', 'id');
+        $rsm->addFieldResult('a', 'a__topic', 'topic');
+        $rsm->addFieldResult('c', 'c__id', 'id');
+        $rsm->addFieldResult('c', 'c__topic', 'topic');
+
+        return $rsm;
+    }
+
+    /**
+     * SELECT PARTIAL u.{id, status}, PARTIAL a.{id, topic}, PARTIAL c.{id, topic}
+     *   FROM Doctrine\Tests\Models\CMS\CmsUser u
+     *   JOIN u.articles a
+     *   JOIN a.comments c
+     */
+    public function testDeepFetchJoinAttachesToElementsOfEarlierRows(): void
+    {
+        $resultSet = [
+            ['u__id' => '1', 'u__status' => 'developer', 'a__id' => '1', 'a__topic' => 'A1', 'c__id' => '1', 'c__topic' => 'C1'],
+            ['u__id' => '2', 'u__status' => 'admin', 'a__id' => '2', 'a__topic' => 'A2', 'c__id' => '2', 'c__topic' => 'C2'],
+            ['u__id' => '1', 'u__status' => 'developer', 'a__id' => '1', 'a__topic' => 'A1', 'c__id' => '3', 'c__topic' => 'C3'],
+            ['u__id' => '1', 'u__status' => 'developer', 'a__id' => '3', 'a__topic' => 'A3', 'c__id' => null, 'c__topic' => null],
+        ];
+
+        $hydrator = new ArrayHydrator($this->entityManager);
+        $result   = $hydrator->hydrateAll($this->createResultMock($resultSet), $this->createUserArticleCommentResultSetMapping());
+
+        self::assertSame([
+            [
+                'id' => 1,
+                'status' => 'developer',
+                'articles' => [
+                    [
+                        'id' => 1,
+                        'topic' => 'A1',
+                        'comments' => [
+                            ['id' => 1, 'topic' => 'C1'],
+                            ['id' => 3, 'topic' => 'C3'],
+                        ],
+                    ],
+                    ['id' => 3, 'topic' => 'A3', 'comments' => []],
+                ],
+            ],
+            [
+                'id' => 2,
+                'status' => 'admin',
+                'articles' => [
+                    ['id' => 2, 'topic' => 'A2', 'comments' => [['id' => 2, 'topic' => 'C2']]],
+                ],
+            ],
+        ], $result);
+    }
+
+    /**
+     * SELECT PARTIAL u.{id, status}, PARTIAL a.{id, topic}, PARTIAL c.{id, topic}
+     *   FROM Doctrine\Tests\Models\CMS\CmsUser u
+     *   JOIN u.articles a
+     *   JOIN a.comments c
+     */
+    public function testResultIterationWithFetchJoinHydratesEachRowOnItsOwn(): void
+    {
+        $resultSet = [
+            ['u__id' => '1', 'u__status' => 'developer', 'a__id' => '1', 'a__topic' => 'A1', 'c__id' => '1', 'c__topic' => 'C1'],
+            ['u__id' => '1', 'u__status' => 'developer', 'a__id' => '1', 'a__topic' => 'A1', 'c__id' => '2', 'c__topic' => 'C2'],
+        ];
+
+        $hydrator = new ArrayHydrator($this->entityManager);
+        $rows     = [];
+
+        foreach ($hydrator->toIterable($this->createResultMock($resultSet), $this->createUserArticleCommentResultSetMapping()) as $row) {
+            $rows[] = $row;
+        }
+
+        self::assertSame([
+            [
+                'id' => 1,
+                'status' => 'developer',
+                'articles' => [['id' => 1, 'topic' => 'A1', 'comments' => [['id' => 1, 'topic' => 'C1']]]],
+            ],
+            [
+                'id' => 1,
+                'status' => 'developer',
+                'articles' => [['id' => 1, 'topic' => 'A1', 'comments' => [['id' => 2, 'topic' => 'C2']]]],
+            ],
+        ], $rows);
+    }
+
     /**
      * SELECT PARTIAL u.{id, status}
      *   FROM Doctrine\Tests\Models\CMS\CmsUser u
