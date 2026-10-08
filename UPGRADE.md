@@ -21,6 +21,13 @@ Row state is now kept on the hydrator instance instead of being passed by refere
   the `$idTemplate` property.
 - `gatherScalarRowData(array &$data)` now takes `$data` by value.
 
+## BC BREAK: `ArrayHydrator::toIterable()` hydrates each row on its own
+
+When iterating an array hydrated query with fetch joins through `toIterable()`,
+each yielded row now contains the root entity and its joined entities of that
+row only, like with object hydration. Previously, a root entity that was already
+seen in an earlier row was yielded as an incomplete array without its own fields.
+
 ## Removed `Doctrine\ORM\Tools\Pagination\Paginator`
 
 The class deprecated in 3.7 has been removed. Use
