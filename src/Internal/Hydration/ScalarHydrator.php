@@ -16,20 +16,18 @@ class ScalarHydrator extends AbstractHydrator
      */
     protected function hydrateAllData(): array
     {
-        $result = [];
-
         while ($data = $this->statement()->fetchAssociative()) {
-            $this->hydrateRowData($data, $result);
+            $this->hydrateRowData($data);
         }
 
-        return $result;
+        return $this->takeResult();
     }
 
     /**
      * {@inheritDoc}
      */
-    protected function hydrateRowData(array $row, array &$result): void
+    protected function hydrateRowData(array $row): void
     {
-        $result[] = $this->gatherScalarRowData($row);
+        $this->result[] = $this->gatherScalarRowData($row);
     }
 }

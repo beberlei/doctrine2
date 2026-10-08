@@ -34,9 +34,6 @@ class ObjectHydrator extends AbstractHydrator
     /** @var mixed[] */
     private array $resultPointers = [];
 
-    /** @var mixed[] */
-    private array $idTemplate = [];
-
     private int $resultCounter = 0;
 
     /** @var mixed[] */
@@ -141,10 +138,8 @@ class ObjectHydrator extends AbstractHydrator
      */
     protected function hydrateAllData(): array
     {
-        $result = [];
-
         while ($row = $this->statement()->fetchAssociative()) {
-            $this->hydrateRowData($row, $result);
+            $this->hydrateRowData($row);
         }
 
         // Take snapshots from all newly initialized collections
@@ -158,7 +153,7 @@ class ObjectHydrator extends AbstractHydrator
             }
         }
 
-        return $result;
+        return $this->takeResult();
     }
 
     /**
@@ -316,16 +311,14 @@ class ObjectHydrator extends AbstractHydrator
      *         level of the hydrated result. A typical example are the objects of the type
      *         specified by the FROM clause in a DQL query.
      *
-     * @param mixed[] $row    The data of the row to process.
-     * @param mixed[] $result The result array to fill.
+     * @param mixed[] $row The data of the row to process.
      */
-    protected function hydrateRowData(array $row, array &$result): void
+    protected function hydrateRowData(array $row): void
     {
-        // Initialize
-        $id                 = $this->idTemplate; // initialize the id-memory
-        $nonemptyComponents = [];
         // Split the row data into chunks of class data.
-        $rowData = $this->gatherRowData($row, $id, $nonemptyComponents);
+        $rowData            = $this->gatherRowData($row);
+        $id                 = $this->rowId;
+        $nonemptyComponents = $this->nonemptyComponents;
 
         // reset result pointers for each data row
         $this->resultPointers = [];
@@ -481,9 +474,9 @@ class ObjectHydrator extends AbstractHydrator
                 // if this row has a NULL value for the root result id then make it a null result.
                 if (! isset($nonemptyComponents[$dqlAlias])) {
                     if ($this->resultSetMapping()->isMixed) {
-                        $result[] = [$entityKey => null];
+                        $this->result[] = [$entityKey => null];
                     } else {
-                        $result[] = null;
+                        $this->result[] = null;
                     }
 
                     $resultKey = $this->resultCounter;
@@ -506,7 +499,7 @@ class ObjectHydrator extends AbstractHydrator
                             $this->hints['collection']->hydrateSet($resultKey, $element);
                         }
 
-                        $result[$resultKey] = $element;
+                        $this->result[$resultKey] = $element;
                     } else {
                         $resultKey = $this->resultCounter;
                         ++$this->resultCounter;
@@ -515,7 +508,7 @@ class ObjectHydrator extends AbstractHydrator
                             $this->hints['collection']->hydrateAdd($element);
                         }
 
-                        $result[] = $element;
+                        $this->result[] = $element;
                     }
 
                     $this->identifierMap[$dqlAlias][$id[$dqlAlias]] = $resultKey;
@@ -525,7 +518,7 @@ class ObjectHydrator extends AbstractHydrator
                 } else {
                     // Update result pointer
                     $index                           = $this->identifierMap[$dqlAlias][$id[$dqlAlias]];
-                    $this->resultPointers[$dqlAlias] = $result[$index];
+                    $this->resultPointers[$dqlAlias] = $this->result[$index];
                     $resultKey                       = $index;
                 }
             }
@@ -548,7 +541,7 @@ class ObjectHydrator extends AbstractHydrator
             }
 
             foreach ($rowData['scalars'] as $name => $value) {
-                $result[$resultKey][$name] = $value;
+                $this->result[$resultKey][$name] = $value;
             }
         }
 
@@ -564,12 +557,12 @@ class ObjectHydrator extends AbstractHydrator
                 $obj = $newObject['obj'];
 
                 if ($scalarCount === 0 && count($rowData['newObjects']) === 1) {
-                    $result[$resultKey] = $obj;
+                    $this->result[$resultKey] = $obj;
 
                     continue;
                 }
 
-                $result[$resultKey][$objIndex] = $obj;
+                $this->result[$resultKey][$objIndex] = $obj;
             }
         }
     }
