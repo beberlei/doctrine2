@@ -6,6 +6,7 @@ namespace Doctrine\Tests\ORM\Hydration;
 
 use Doctrine\ORM\Internal\Hydration\ArrayHydrator;
 use Doctrine\ORM\Query\ResultSetMapping;
+use Doctrine\Tests\Models\CMS\CmsAddress;
 use Doctrine\Tests\Models\CMS\CmsArticle;
 use Doctrine\Tests\Models\CMS\CmsComment;
 use Doctrine\Tests\Models\CMS\CmsPhonenumber;
@@ -14,6 +15,8 @@ use Doctrine\Tests\Models\Forum\ForumBoard;
 use Doctrine\Tests\Models\Forum\ForumCategory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
+
+use function iterator_to_array;
 
 class ArrayHydratorTest extends HydrationTestCase
 {
@@ -1084,6 +1087,95 @@ class ArrayHydratorTest extends HydrationTestCase
                 'articles' => [['id' => 1, 'topic' => 'A1', 'comments' => [['id' => 2, 'topic' => 'C2']]]],
             ],
         ], $rows);
+    }
+
+    /**
+     * SELECT PARTIAL u.{id, status}, PARTIAL p.{phonenumber}, UPPER(u.name) nameUpper
+     *   FROM Doctrine\Tests\Models\CMS\CmsUser u
+     *   LEFT JOIN u.phonenumbers p
+     */
+    public function testResultIterationWithFetchJoinAndScalar(): void
+    {
+        $rsm = new ResultSetMapping();
+        $rsm->addEntityResult(CmsUser::class, 'u');
+        $rsm->addJoinedEntityResult(CmsPhonenumber::class, 'p', 'u', 'phonenumbers');
+        $rsm->addFieldResult('u', 'u__id', 'id');
+        $rsm->addFieldResult('u', 'u__status', 'status');
+        $rsm->addScalarResult('sclr0', 'nameUpper', 'string');
+        $rsm->addFieldResult('p', 'p__phonenumber', 'phonenumber');
+
+        $resultSet = [
+            ['u__id' => '1', 'u__status' => 'developer', 'sclr0' => 'ROMANB', 'p__phonenumber' => '42'],
+            ['u__id' => '1', 'u__status' => 'developer', 'sclr0' => 'ROMANB', 'p__phonenumber' => '43'],
+            ['u__id' => '2', 'u__status' => 'developer', 'sclr0' => 'JWAGE', 'p__phonenumber' => null],
+        ];
+
+        $hydrator = new ArrayHydrator($this->entityManager);
+
+        self::assertSame([
+            [
+                0 => ['id' => 1, 'status' => 'developer', 'phonenumbers' => [['phonenumber' => '42']]],
+                'nameUpper' => 'ROMANB',
+            ],
+            [
+                0 => ['id' => 1, 'status' => 'developer', 'phonenumbers' => [['phonenumber' => '43']]],
+                'nameUpper' => 'ROMANB',
+            ],
+            [
+                0 => ['id' => 2, 'status' => 'developer', 'phonenumbers' => []],
+                'nameUpper' => 'JWAGE',
+            ],
+        ], iterator_to_array($hydrator->toIterable($this->createResultMock($resultSet), $rsm), false));
+    }
+
+    /**
+     * SELECT PARTIAL u.{id, status}, PARTIAL ad.{id, city}, PARTIAL a.{id, topic}
+     *   FROM Doctrine\Tests\Models\CMS\CmsUser u
+     *   LEFT JOIN u.address ad
+     *   LEFT JOIN u.articles a INDEX BY a.id
+     */
+    public function testResultIterationWithToOneAndIndexedFetchJoin(): void
+    {
+        $rsm = new ResultSetMapping();
+        $rsm->addEntityResult(CmsUser::class, 'u');
+        $rsm->addJoinedEntityResult(CmsAddress::class, 'ad', 'u', 'address');
+        $rsm->addJoinedEntityResult(CmsArticle::class, 'a', 'u', 'articles');
+        $rsm->addFieldResult('u', 'u__id', 'id');
+        $rsm->addFieldResult('u', 'u__status', 'status');
+        $rsm->addFieldResult('ad', 'ad__id', 'id');
+        $rsm->addFieldResult('ad', 'ad__city', 'city');
+        $rsm->addFieldResult('a', 'a__id', 'id');
+        $rsm->addFieldResult('a', 'a__topic', 'topic');
+        $rsm->addIndexBy('a', 'id');
+
+        $resultSet = [
+            ['u__id' => '1', 'u__status' => 'developer', 'ad__id' => '1', 'ad__city' => 'Berlin', 'a__id' => '7', 'a__topic' => 'A7'],
+            ['u__id' => '2', 'u__status' => 'developer', 'ad__id' => null, 'ad__city' => null, 'a__id' => '9', 'a__topic' => 'A9'],
+            ['u__id' => '3', 'u__status' => 'developer', 'ad__id' => null, 'ad__city' => null, 'a__id' => null, 'a__topic' => null],
+        ];
+
+        $hydrator = new ArrayHydrator($this->entityManager);
+
+        self::assertSame([
+            [
+                'id' => 1,
+                'status' => 'developer',
+                'address' => ['id' => 1, 'city' => 'Berlin'],
+                'articles' => [7 => ['id' => 7, 'topic' => 'A7']],
+            ],
+            [
+                'id' => 2,
+                'status' => 'developer',
+                'address' => null,
+                'articles' => [9 => ['id' => 9, 'topic' => 'A9']],
+            ],
+            [
+                'id' => 3,
+                'status' => 'developer',
+                'address' => null,
+                'articles' => [],
+            ],
+        ], iterator_to_array($hydrator->toIterable($this->createResultMock($resultSet), $rsm), false));
     }
 
     /**
