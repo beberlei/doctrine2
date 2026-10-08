@@ -94,13 +94,6 @@ class ArrayHydrator extends AbstractHydrator
         $this->resultCounter  = 0;
     }
 
-    #[Override]
-    protected function cleanupAfterRowIteration(): void
-    {
-        $this->identifierMap  =
-        $this->resultPointers = [];
-    }
-
     /**
      * {@inheritDoc}
      */
@@ -137,134 +130,138 @@ class ArrayHydrator extends AbstractHydrator
         $id                 = $this->rowId;
         $nonemptyComponents = $this->nonemptyComponents;
 
-        foreach ($rowData['data'] as $dqlAlias => $data) {
-            if (isset($this->resultSetMapping()->parentAliasMap[$dqlAlias])) {
-                // It's a joined result
+        if ($this->iterable) {
+            $resultKey = $this->hydrateIteratedRowEntities($row, $rowData['data'], $nonemptyComponents);
+        } else {
+            foreach ($rowData['data'] as $dqlAlias => $data) {
+                if (isset($this->resultSetMapping()->parentAliasMap[$dqlAlias])) {
+                    // It's a joined result
 
-                $parent = $this->resultSetMapping()->parentAliasMap[$dqlAlias];
-                $path   = $parent . '.' . $dqlAlias;
+                    $parent = $this->resultSetMapping()->parentAliasMap[$dqlAlias];
+                    $path   = $parent . '.' . $dqlAlias;
 
-                // missing parent data, skipping as RIGHT JOIN hydration is not supported.
-                if (! isset($nonemptyComponents[$parent])) {
-                    continue;
-                }
-
-                if (! isset($this->resultPointers[$parent])) {
-                    unset($this->resultPointers[$dqlAlias]); // Ticket #1228
-
-                    continue;
-                }
-
-                $baseNode      = $this->resultPointers[$parent];
-                $relationAlias = $this->resultSetMapping()->relationMap[$dqlAlias];
-                $parentClass   = $this->metadataCache[$this->resultSetMapping()->aliasMap[$parent]];
-                $relation      = $parentClass->associationMappings[$relationAlias];
-
-                // Check the type of the relation (many or single-valued)
-                if (! $relation->isToOne()) {
-                    $index = false;
-
-                    if (! isset($this->nodes[$baseNode][$relationAlias])) {
-                        $this->nodes[$baseNode][$relationAlias] = [];
-                    }
-
-                    if (isset($nonemptyComponents[$dqlAlias])) {
-                        $indexExists  = isset($this->identifierMap[$path][$id[$parent]][$id[$dqlAlias]]);
-                        $index        = $indexExists ? $this->identifierMap[$path][$id[$parent]][$id[$dqlAlias]] : false;
-                        $indexIsValid = $index !== false ? isset($this->nodes[$baseNode][$relationAlias][$index]) : false;
-
-                        if (! $indexExists || ! $indexIsValid) {
-                            $element = isset($this->nodeAliases[$dqlAlias]) ? $this->createNode($data, $dqlAlias) : $data;
-
-                            if (isset($this->resultSetMapping()->indexByMap[$dqlAlias])) {
-                                $this->nodes[$baseNode][$relationAlias][$row[$this->resultSetMapping()->indexByMap[$dqlAlias]]] = $element;
-                            } else {
-                                $this->nodes[$baseNode][$relationAlias][] = $element;
-                            }
-
-                            $index = array_key_last($this->nodes[$baseNode][$relationAlias]);
-
-                            $this->identifierMap[$path][$id[$parent]][$id[$dqlAlias]] = $index;
-                        }
-                    }
-
-                    if (! isset($this->nodeAliases[$dqlAlias])) {
+                    // missing parent data, skipping as RIGHT JOIN hydration is not supported.
+                    if (! isset($nonemptyComponents[$parent])) {
                         continue;
                     }
 
-                    if ($index === false) {
-                        $index = array_key_last($this->nodes[$baseNode][$relationAlias]);
+                    if (! isset($this->resultPointers[$parent])) {
+                        unset($this->resultPointers[$dqlAlias]); // Ticket #1228
+
+                        continue;
                     }
 
-                    if ($index !== null && isset($this->nodes[$baseNode][$relationAlias][$index])) {
-                        $this->resultPointers[$dqlAlias] = $this->nodes[$baseNode][$relationAlias][$index];
-                    }
-                } else {
-                    if (! isset($this->nodes[$baseNode][$relationAlias])) {
-                        $this->nodes[$baseNode][$relationAlias] = match (true) {
-                            ! isset($nonemptyComponents[$dqlAlias]) => null,
-                            isset($this->nodeAliases[$dqlAlias]) => $this->createNode($data, $dqlAlias),
-                            default => $data,
-                        };
-                    }
+                    $baseNode      = $this->resultPointers[$parent];
+                    $relationAlias = $this->resultSetMapping()->relationMap[$dqlAlias];
+                    $parentClass   = $this->metadataCache[$this->resultSetMapping()->aliasMap[$parent]];
+                    $relation      = $parentClass->associationMappings[$relationAlias];
 
-                    if (isset($this->nodeAliases[$dqlAlias], $this->nodes[$baseNode][$relationAlias])) {
-                        $this->resultPointers[$dqlAlias] = $this->nodes[$baseNode][$relationAlias];
-                    }
-                }
-            } else {
-                // It's a root result element
+                    // Check the type of the relation (many or single-valued)
+                    if (! $relation->isToOne()) {
+                        $index = false;
 
-                $entityKey = $this->resultSetMapping()->entityMappings[$dqlAlias] ?: 0;
+                        if (! isset($this->nodes[$baseNode][$relationAlias])) {
+                            $this->nodes[$baseNode][$relationAlias] = [];
+                        }
 
-                // if this row has a NULL value for the root result id then make it a null result.
-                if (! isset($nonemptyComponents[$dqlAlias])) {
-                    $this->result[] = $this->resultSetMapping()->isMixed
-                        ? [$entityKey => null]
-                        : null;
+                        if (isset($nonemptyComponents[$dqlAlias])) {
+                            $indexExists  = isset($this->identifierMap[$path][$id[$parent]][$id[$dqlAlias]]);
+                            $index        = $indexExists ? $this->identifierMap[$path][$id[$parent]][$id[$dqlAlias]] : false;
+                            $indexIsValid = $index !== false ? isset($this->nodes[$baseNode][$relationAlias][$index]) : false;
 
-                    $resultKey = $this->resultCounter;
-                    ++$this->resultCounter;
+                            if (! $indexExists || ! $indexIsValid) {
+                                $element = isset($this->nodeAliases[$dqlAlias]) ? $this->createNode($data, $dqlAlias) : $data;
 
-                    continue;
-                }
+                                if (isset($this->resultSetMapping()->indexByMap[$dqlAlias])) {
+                                    $this->nodes[$baseNode][$relationAlias][$row[$this->resultSetMapping()->indexByMap[$dqlAlias]]] = $element;
+                                } else {
+                                    $this->nodes[$baseNode][$relationAlias][] = $element;
+                                }
 
-                // Check for an existing element
-                if ($this->isSimpleQuery || ! isset($this->identifierMap[$dqlAlias][$id[$dqlAlias]])) {
-                    $node    = isset($this->nodeAliases[$dqlAlias]) ? $this->createNode($data, $dqlAlias) : null;
-                    $element = $node ?? $data;
+                                $index = array_key_last($this->nodes[$baseNode][$relationAlias]);
 
-                    if (isset($this->resultSetMapping()->indexByMap[$dqlAlias])) {
-                        $resultKey                = $row[$this->resultSetMapping()->indexByMap[$dqlAlias]];
-                        $this->result[$resultKey] = $this->resultSetMapping()->isMixed
-                            ? [$entityKey => $element]
-                            : $element;
+                                $this->identifierMap[$path][$id[$parent]][$id[$dqlAlias]] = $index;
+                            }
+                        }
+
+                        if (! isset($this->nodeAliases[$dqlAlias])) {
+                            continue;
+                        }
+
+                        if ($index === false) {
+                            $index = array_key_last($this->nodes[$baseNode][$relationAlias]);
+                        }
+
+                        if ($index !== null && isset($this->nodes[$baseNode][$relationAlias][$index])) {
+                            $this->resultPointers[$dqlAlias] = $this->nodes[$baseNode][$relationAlias][$index];
+                        }
                     } else {
-                        $resultKey      = $this->resultCounter;
-                        $this->result[] = $this->resultSetMapping()->isMixed
-                            ? [$entityKey => $element]
-                            : $element;
+                        if (! isset($this->nodes[$baseNode][$relationAlias])) {
+                            $this->nodes[$baseNode][$relationAlias] = match (true) {
+                                ! isset($nonemptyComponents[$dqlAlias]) => null,
+                                isset($this->nodeAliases[$dqlAlias]) => $this->createNode($data, $dqlAlias),
+                                default => $data,
+                            };
+                        }
 
-                        ++$this->resultCounter;
-                    }
-
-                    $this->identifierMap[$dqlAlias][$id[$dqlAlias]] = $resultKey;
-
-                    if ($node !== null) {
-                        $this->resultPointers[$dqlAlias] = $node;
-                        $this->rootNodes[]               = [
-                            array_key_last($this->result),
-                            $this->resultSetMapping()->isMixed ? $entityKey : null,
-                            $node,
-                        ];
+                        if (isset($this->nodeAliases[$dqlAlias], $this->nodes[$baseNode][$relationAlias])) {
+                            $this->resultPointers[$dqlAlias] = $this->nodes[$baseNode][$relationAlias];
+                        }
                     }
                 } else {
-                    $resultKey = $this->identifierMap[$dqlAlias][$id[$dqlAlias]];
+                    // It's a root result element
 
-                    if (isset($this->nodeAliases[$dqlAlias])) {
-                        $this->resultPointers[$dqlAlias] = $this->resultSetMapping()->isMixed
-                            ? $this->result[$resultKey][$entityKey]
-                            : $this->result[$resultKey];
+                    $entityKey = $this->resultSetMapping()->entityMappings[$dqlAlias] ?: 0;
+
+                    // if this row has a NULL value for the root result id then make it a null result.
+                    if (! isset($nonemptyComponents[$dqlAlias])) {
+                        $this->result[] = $this->resultSetMapping()->isMixed
+                            ? [$entityKey => null]
+                            : null;
+
+                        $resultKey = $this->resultCounter;
+                        ++$this->resultCounter;
+
+                        continue;
+                    }
+
+                    // Check for an existing element
+                    if ($this->isSimpleQuery || ! isset($this->identifierMap[$dqlAlias][$id[$dqlAlias]])) {
+                        $node    = isset($this->nodeAliases[$dqlAlias]) ? $this->createNode($data, $dqlAlias) : null;
+                        $element = $node ?? $data;
+
+                        if (isset($this->resultSetMapping()->indexByMap[$dqlAlias])) {
+                            $resultKey                = $row[$this->resultSetMapping()->indexByMap[$dqlAlias]];
+                            $this->result[$resultKey] = $this->resultSetMapping()->isMixed
+                                ? [$entityKey => $element]
+                                : $element;
+                        } else {
+                            $resultKey      = $this->resultCounter;
+                            $this->result[] = $this->resultSetMapping()->isMixed
+                                ? [$entityKey => $element]
+                                : $element;
+
+                            ++$this->resultCounter;
+                        }
+
+                        $this->identifierMap[$dqlAlias][$id[$dqlAlias]] = $resultKey;
+
+                        if ($node !== null) {
+                            $this->resultPointers[$dqlAlias] = $node;
+                            $this->rootNodes[]               = [
+                                array_key_last($this->result),
+                                $this->resultSetMapping()->isMixed ? $entityKey : null,
+                                $node,
+                            ];
+                        }
+                    } else {
+                        $resultKey = $this->identifierMap[$dqlAlias][$id[$dqlAlias]];
+
+                        if (isset($this->nodeAliases[$dqlAlias])) {
+                            $this->resultPointers[$dqlAlias] = $this->resultSetMapping()->isMixed
+                                ? $this->result[$resultKey][$entityKey]
+                                : $this->result[$resultKey];
+                        }
                     }
                 }
             }
@@ -309,6 +306,96 @@ class ArrayHydrator extends AbstractHydrator
                 $this->result[$resultKey][$objIndex] = $obj;
             }
         }
+    }
+
+    /**
+     * Hydrates the entities of a row on their own, as used by {@see toIterable()}.
+     *
+     * A single row holds at most one element per DQL alias, and joined DQL aliases
+     * come after their parent, so the elements are first collected in row order,
+     * with an empty relation in their parent, and then attached to their parent in
+     * reverse row order, which completes each element before it is attached.
+     *
+     * @param mixed[]                $row
+     * @param array<string, mixed[]> $data
+     * @param array<string, bool>    $nonemptyComponents
+     *
+     * @return array-key|null The result key of the last root element.
+     */
+    private function hydrateIteratedRowEntities(array $row, array $data, array $nonemptyComponents): int|string|null
+    {
+        $resultSetMapping = $this->resultSetMapping();
+        $elements         = [];
+        $joinedAliases    = [];
+        $rootAliases      = [];
+
+        foreach ($data as $dqlAlias => $elementData) {
+            if (! isset($resultSetMapping->parentAliasMap[$dqlAlias])) {
+                $rootAliases[] = $dqlAlias;
+
+                if (isset($nonemptyComponents[$dqlAlias])) {
+                    $elements[$dqlAlias] = $elementData;
+                }
+
+                continue;
+            }
+
+            $parent = $resultSetMapping->parentAliasMap[$dqlAlias];
+
+            // missing parent data, skipping as RIGHT JOIN hydration is not supported.
+            if (! isset($elements[$parent])) {
+                continue;
+            }
+
+            $relationAlias = $resultSetMapping->relationMap[$dqlAlias];
+
+            if (! isset($elements[$parent][$relationAlias])) {
+                $elements[$parent][$relationAlias] = $this->metadataCache[$resultSetMapping->aliasMap[$parent]]->associationMappings[$relationAlias]->isToOne()
+                    ? null
+                    : [];
+            }
+
+            if (! isset($nonemptyComponents[$dqlAlias])) {
+                continue;
+            }
+
+            $elements[$dqlAlias] = $elementData;
+            $joinedAliases[]     = $dqlAlias;
+        }
+
+        for ($i = count($joinedAliases) - 1; $i >= 0; --$i) {
+            $dqlAlias      = $joinedAliases[$i];
+            $parent        = $resultSetMapping->parentAliasMap[$dqlAlias];
+            $relationAlias = $resultSetMapping->relationMap[$dqlAlias];
+
+            if (! is_array($elements[$parent][$relationAlias])) {
+                $elements[$parent][$relationAlias] = $elements[$dqlAlias];
+            } elseif (isset($resultSetMapping->indexByMap[$dqlAlias])) {
+                $elements[$parent][$relationAlias][$row[$resultSetMapping->indexByMap[$dqlAlias]]] = $elements[$dqlAlias];
+            } else {
+                $elements[$parent][$relationAlias][] = $elements[$dqlAlias];
+            }
+        }
+
+        $resultKey = null;
+
+        foreach ($rootAliases as $dqlAlias) {
+            $entityKey = $resultSetMapping->entityMappings[$dqlAlias] ?: 0;
+            $element   = $elements[$dqlAlias] ?? null;
+
+            $element = $resultSetMapping->isMixed ? [$entityKey => $element] : $element;
+
+            if (isset($elements[$dqlAlias], $resultSetMapping->indexByMap[$dqlAlias])) {
+                $resultKey                = $row[$resultSetMapping->indexByMap[$dqlAlias]];
+                $this->result[$resultKey] = $element;
+            } else {
+                $this->result[] = $element;
+                $resultKey      = array_key_last($this->result);
+                ++$this->resultCounter;
+            }
+        }
+
+        return $resultKey;
     }
 
     /**

@@ -109,6 +109,12 @@ abstract class AbstractHydrator
     protected array $nonemptyComponents = [];
 
     /**
+     * Whether the current hydration was started through {@see toIterable()},
+     * so that each row is hydrated on its own.
+     */
+    protected bool $iterable = false;
+
+    /**
      * Initializes a new instance of a class derived from <tt>AbstractHydrator</tt>.
      */
     public function __construct(protected EntityManagerInterface $em)
@@ -128,9 +134,10 @@ abstract class AbstractHydrator
      */
     final public function toIterable(Result $stmt, ResultSetMapping $resultSetMapping, array $hints = []): Generator
     {
-        $this->stmt  = $stmt;
-        $this->rsm   = $resultSetMapping;
-        $this->hints = $hints;
+        $this->stmt     = $stmt;
+        $this->rsm      = $resultSetMapping;
+        $this->hints    = $hints;
+        $this->iterable = true;
 
         $evm = $this->em->getEventManager();
 
@@ -241,6 +248,7 @@ abstract class AbstractHydrator
         $this->idTemplate         = [];
         $this->rowId              = [];
         $this->nonemptyComponents = [];
+        $this->iterable           = false;
 
         $this
             ->em
