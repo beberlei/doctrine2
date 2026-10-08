@@ -81,6 +81,40 @@ abstract class AbstractHydrator
     protected array $hints = [];
 
     /**
+     * The result that is filled by {@see hydrateRowData()}.
+     *
+     * @var mixed[]
+     */
+    protected array $result = [];
+
+    /**
+     * The initial identifier hashes per DQL alias, copied for each row.
+     *
+     * @var array<string, string>
+     */
+    protected array $idTemplate = [];
+
+    /**
+     * Identifier hashes per DQL alias of the row last processed by {@see gatherRowData()}.
+     *
+     * @var array<string, string>
+     */
+    protected array $rowId = [];
+
+    /**
+     * DQL aliases with at least one non NULL identifier value in the row last processed by {@see gatherRowData()}.
+     *
+     * @var array<string, bool>
+     */
+    protected array $nonemptyComponents = [];
+
+    /**
+     * Whether the current hydration was started through {@see toIterable()},
+     * so that each row is hydrated on its own.
+     */
+    protected bool $iterable = false;
+
+    /**
      * Initializes a new instance of a class derived from <tt>AbstractHydrator</tt>.
      */
     public function __construct(protected EntityManagerInterface $em)
@@ -100,9 +134,10 @@ abstract class AbstractHydrator
      */
     final public function toIterable(Result $stmt, ResultSetMapping $resultSetMapping, array $hints = []): Generator
     {
-        $this->stmt  = $stmt;
-        $this->rsm   = $resultSetMapping;
-        $this->hints = $hints;
+        $this->stmt     = $stmt;
+        $this->rsm      = $resultSetMapping;
+        $this->hints    = $hints;
+        $this->iterable = true;
 
         $evm = $this->em->getEventManager();
 
@@ -118,9 +153,9 @@ abstract class AbstractHydrator
                     break;
                 }
 
-                $result = [];
+                $this->hydrateRowData($row);
 
-                $this->hydrateRowData($row, $result);
+                $result = $this->takeResult();
 
                 $this->cleanupAfterRowIteration();
                 if (count($result) === 1) {
@@ -205,10 +240,15 @@ abstract class AbstractHydrator
     {
         $this->statement()->free();
 
-        $this->stmt          = null;
-        $this->rsm           = null;
-        $this->cache         = [];
-        $this->metadataCache = [];
+        $this->stmt               = null;
+        $this->rsm                = null;
+        $this->cache              = [];
+        $this->metadataCache      = [];
+        $this->result             = [];
+        $this->idTemplate         = [];
+        $this->rowId              = [];
+        $this->nonemptyComponents = [];
+        $this->iterable           = false;
 
         $this
             ->em
@@ -221,16 +261,15 @@ abstract class AbstractHydrator
     }
 
     /**
-     * Hydrates a single row from the current statement instance.
+     * Hydrates a single row from the current statement instance into {@see $result}.
      *
      * Template method.
      *
-     * @param mixed[] $row    The row data.
-     * @param mixed[] $result The result to fill.
+     * @param mixed[] $row The row data.
      *
      * @throws HydrationException
      */
-    protected function hydrateRowData(array $row, array &$result): void
+    protected function hydrateRowData(array $row): void
     {
         throw new HydrationException('hydrateRowData() not implemented by this hydrator.');
     }
@@ -241,6 +280,19 @@ abstract class AbstractHydrator
     abstract protected function hydrateAllData(): mixed;
 
     /**
+     * Returns the hydrated {@see $result} and resets it, without keeping a second reference to it.
+     *
+     * @return mixed[]
+     */
+    protected function takeResult(): array
+    {
+        $result       = $this->result;
+        $this->result = [];
+
+        return $result;
+    }
+
+    /**
      * Processes a row of the result set.
      *
      * Used for identity-based hydration (HYDRATE_OBJECT and HYDRATE_ARRAY).
@@ -249,9 +301,10 @@ abstract class AbstractHydrator
      * field names during this procedure as well as any necessary conversions on
      * the values applied. Scalar values are kept in a specific key 'scalars'.
      *
+     * The identifier hashes (Dql-Alias => ID-Hash) are stored in {@see $rowId}, and
+     * the DQL aliases with at least one non NULL identifier value in {@see $nonemptyComponents}.
+     *
      * @param mixed[] $data SQL Result Row.
-     * @phpstan-param array<string, string> $id                 Dql-Alias => ID-Hash.
-     * @phpstan-param array<string, bool>   $nonemptyComponents Does this DQL-Alias has at least one non NULL value?
      *
      * @return array<string, array<string, mixed>> An array with all the fields
      *                                             (name => value) of the data
@@ -267,9 +320,11 @@ abstract class AbstractHydrator
      *                   scalars?: array
      *               }
      */
-    protected function gatherRowData(array $data, array &$id, array &$nonemptyComponents): array
+    protected function gatherRowData(array $data): array
     {
-        $rowData = ['data' => [], 'newObjects' => []];
+        $rowData            = ['data' => [], 'newObjects' => []];
+        $id                 = $this->idTemplate;
+        $nonemptyComponents = [];
 
         foreach ($this->rsm->newObjectMappings as $mapping) {
             if (! array_key_exists($mapping['objIndex'], $this->rsm->newObject)) {
@@ -384,6 +439,9 @@ abstract class AbstractHydrator
             $rowData['newObjects'][$objIndex]['obj'] = $obj;
         }
 
+        $this->rowId              = $id;
+        $this->nonemptyComponents = $nonemptyComponents;
+
         return $rowData;
     }
 
@@ -407,7 +465,7 @@ abstract class AbstractHydrator
      * @return mixed[] The processed row.
      * @phpstan-return array<string, mixed>
      */
-    protected function gatherScalarRowData(array &$data): array
+    protected function gatherScalarRowData(array $data): array
     {
         $rowData = [];
 

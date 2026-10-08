@@ -8,6 +8,26 @@ awareness about deprecated code.
 
 # Upgrade to 4.0
 
+## BC BREAK: Changed `AbstractHydrator` row hydration methods
+
+Row state is now kept on the hydrator instance instead of being passed by reference:
+
+- `hydrateRowData(array $row, array &$result)` is now `hydrateRowData(array $row)`
+  and must fill the `$result` property. Use `takeResult()` in `hydrateAllData()`
+  to fetch and reset it.
+- `gatherRowData(array $data, array &$id, array &$nonemptyComponents)` is now
+  `gatherRowData(array $data)`. The identifier hashes and non-empty DQL aliases
+  are stored in the `$rowId` and `$nonemptyComponents` properties, starting from
+  the `$idTemplate` property.
+- `gatherScalarRowData(array &$data)` now takes `$data` by value.
+
+## BC BREAK: `ArrayHydrator::toIterable()` hydrates each row on its own
+
+When iterating an array hydrated query with fetch joins through `toIterable()`,
+each yielded row now contains the root entity and its joined entities of that
+row only, like with object hydration. Previously, a root entity that was already
+seen in an earlier row was yielded as an incomplete array without its own fields.
+
 ## Removed `Doctrine\ORM\Tools\Pagination\Paginator`
 
 The class deprecated in 3.7 has been removed. Use
