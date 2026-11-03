@@ -9,6 +9,7 @@ use Doctrine\Common\EventManager;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Platforms\AbstractPlatform;
 use Doctrine\DBAL\Result;
+use Doctrine\Deprecations\PHPUnit\VerifyDeprecations;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Events;
 use Doctrine\ORM\Internal\Hydration\AbstractHydrator;
@@ -20,6 +21,7 @@ use Doctrine\Tests\OrmFunctionalTestCase;
 use LogicException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Group;
+use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\MockObject\Stub;
 
 use function iterator_to_array;
@@ -27,6 +29,8 @@ use function iterator_to_array;
 #[CoversClass(AbstractHydrator::class)]
 class AbstractHydratorTest extends OrmFunctionalTestCase
 {
+    use VerifyDeprecations;
+
     private EventManager $eventManager;
     private Result&Stub $mockResult;
     private ResultSetMapping&Stub $mockResultMapping;
@@ -134,6 +138,35 @@ class AbstractHydratorTest extends OrmFunctionalTestCase
         self::assertSame(RowStateHydrator::EMPTY_STATE, $hydrator->state());
     }
 
+    #[IgnoreDeprecations]
+    public function testLegacyHydrateRowDataOverrideIsUsedByHydrateAll(): void
+    {
+        $this->expectDeprecationWithIdentifier('https://github.com/doctrine/orm/pull/12728');
+
+        $hydrator = new LegacyRowHydrator($this->_em);
+
+        self::assertSame([10, 20], $hydrator->hydrateAll($this->createRowsResult([['v' => 1], ['v' => 2]]), $this->mockResultMapping));
+    }
+
+    #[IgnoreDeprecations]
+    public function testLegacyHydrateRowDataOverrideIsUsedByToIterable(): void
+    {
+        $this->expectDeprecationWithIdentifier('https://github.com/doctrine/orm/pull/12728');
+
+        $hydrator = new LegacyRowHydrator($this->_em);
+
+        self::assertSame([10, 20], iterator_to_array($hydrator->toIterable($this->createRowsResult([['v' => 1], ['v' => 2]]), $this->mockResultMapping), false));
+    }
+
+    public function testNewApiDoesNotTriggerDeprecation(): void
+    {
+        $this->expectNoDeprecationWithIdentifier('https://github.com/doctrine/orm/pull/12728');
+
+        $hydrator = new RowStateHydrator($this->_em);
+
+        self::assertSame([1, 2], $hydrator->hydrateAll($this->createRowsResult([['v' => 1], ['v' => 2]]), $this->mockResultMapping));
+    }
+
     /** @param list<array<string, mixed>> $rows */
     private function createRowsResult(array $rows): Result&Stub
     {
@@ -221,43 +254,78 @@ class DummyHydrator extends AbstractHydrator
 
 class RowStateHydrator extends AbstractHydrator
 {
-    public const array EMPTY_STATE = ['result' => [], 'idTemplate' => [], 'rowId' => [], 'nonemptyComponents' => []];
+    public const EMPTY_STATE = ['result' => [], 'idTemplate' => [], 'rowId' => [], 'nonemptyComponents' => []];
 
     /** @return array{result: mixed[], idTemplate: array<string, string>, rowId: array<string, string>, nonemptyComponents: array<string, bool>} */
     public function state(): array
     {
         return [
-            'result' => $this->result,
-            'idTemplate' => $this->idTemplate,
-            'rowId' => $this->rowId,
-            'nonemptyComponents' => $this->nonemptyComponents,
+            'result' => $this->hydrationResult,
+            'idTemplate' => $this->rowIdTemplate,
+            'rowId' => $this->gatheredRowId,
+            'nonemptyComponents' => $this->gatheredNonemptyComponents,
         ];
     }
 
     protected function prepare(): void
     {
-        $this->idTemplate = ['a' => ''];
+        $this->rowIdTemplate = ['a' => ''];
     }
 
     /** @return mixed[] */
     protected function hydrateAllData(): array
     {
-        while ($row = $this->statement()->fetchAssociative()) {
-            $this->hydrateRowData($row);
-        }
+        $this->hydrateAllRows();
 
         return $this->takeResult();
     }
 
     /** @param mixed[] $row */
-    protected function hydrateRowData(array $row): void
+    protected function hydrateRow(array $row): void
     {
         if ($row['v'] === 'fail') {
             throw new LogicException();
         }
 
-        $this->rowId              = ['a' => $this->idTemplate['a'] . '|' . $row['v']];
-        $this->nonemptyComponents = ['a' => true];
-        $this->result[]           = $row['v'];
+        $this->gatheredRowId              = ['a' => $this->rowIdTemplate['a'] . '|' . $row['v']];
+        $this->gatheredNonemptyComponents = ['a' => true];
+        $this->hydrationResult[]          = $row['v'];
+    }
+}
+
+/**
+ * A custom hydrator written against the deprecated by-reference API.
+ */
+class LegacyRowHydrator extends AbstractHydrator
+{
+    /** @return mixed[] */
+    protected function hydrateAllData(): array
+    {
+        $result = [];
+
+        while ($row = $this->statement()->fetchAssociative()) {
+            $this->hydrateRowData($row, $result);
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param mixed[] $row
+     * @param mixed[] $result
+     */
+    protected function hydrateRowData(array $row, array &$result): void
+    {
+        $result[] = $this->gatherScalarRowData($row)['v'] * 10;
+    }
+
+    /**
+     * @param mixed[] $data
+     *
+     * @return mixed[]
+     */
+    protected function gatherScalarRowData(array &$data): array
+    {
+        return $data;
     }
 }

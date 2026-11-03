@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Doctrine\Tests\ORM\Hydration;
 
+use Doctrine\Deprecations\PHPUnit\VerifyDeprecations;
 use Doctrine\ORM\Internal\Hydration\ArrayHydrator;
 use Doctrine\ORM\Query\ResultSetMapping;
 use Doctrine\Tests\Models\CMS\CmsAddress;
@@ -15,11 +16,15 @@ use Doctrine\Tests\Models\Forum\ForumBoard;
 use Doctrine\Tests\Models\Forum\ForumCategory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
+use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 
 use function iterator_to_array;
+use function strtoupper;
 
 class ArrayHydratorTest extends HydrationTestCase
 {
+    use VerifyDeprecations;
+
     /** @phpstan-return list<array{int|string}> */
     public static function provideDataForUserEntityResult(): array
     {
@@ -1061,6 +1066,93 @@ class ArrayHydratorTest extends HydrationTestCase
      *   JOIN u.articles a
      *   JOIN a.comments c
      */
+    #[IgnoreDeprecations]
+    public function testLegacyHydrateRowDataOverrideGetsNestedResultAfterEachRow(): void
+    {
+        $this->expectDeprecationWithIdentifier('https://github.com/doctrine/orm/pull/12728');
+
+        $resultSet = [
+            ['u__id' => '1', 'u__status' => 'developer', 'a__id' => '1', 'a__topic' => 'A1', 'c__id' => '1', 'c__topic' => 'C1'],
+            ['u__id' => '2', 'u__status' => 'admin', 'a__id' => '2', 'a__topic' => 'A2', 'c__id' => '2', 'c__topic' => 'C2'],
+            ['u__id' => '1', 'u__status' => 'developer', 'a__id' => '1', 'a__topic' => 'A1', 'c__id' => '3', 'c__topic' => 'C3'],
+            ['u__id' => '1', 'u__status' => 'developer', 'a__id' => '3', 'a__topic' => 'A3', 'c__id' => null, 'c__topic' => null],
+        ];
+        $rsm       = $this->createUserArticleCommentResultSetMapping();
+
+        $expected = (new ArrayHydrator($this->entityManager))->hydrateAll($this->createResultMock($resultSet), $rsm);
+        $hydrator = new LegacyHydrateRowDataArrayHydrator($this->entityManager);
+
+        self::assertSame($expected, $hydrator->hydrateAll($this->createResultMock($resultSet), $rsm));
+        self::assertCount(4, $hydrator->resultsAfterRow);
+        self::assertSame($expected, $hydrator->resultsAfterRow[3]);
+        self::assertSame(
+            [['id' => 1, 'topic' => 'C1'], ['id' => 3, 'topic' => 'C3']],
+            $hydrator->resultsAfterRow[2][0]['articles'][0]['comments'],
+        );
+    }
+
+    /**
+     * SELECT PARTIAL u.{id, status}, PARTIAL a.{id, topic}, PARTIAL c.{id, topic}
+     *   FROM Doctrine\Tests\Models\CMS\CmsUser u
+     *   JOIN u.articles a
+     *   JOIN a.comments c
+     */
+    #[IgnoreDeprecations]
+    public function testLegacyHydrateRowDataOverrideIsUsedByToIterable(): void
+    {
+        $this->expectDeprecationWithIdentifier('https://github.com/doctrine/orm/pull/12728');
+
+        $resultSet = [
+            ['u__id' => '1', 'u__status' => 'developer', 'a__id' => '1', 'a__topic' => 'A1', 'c__id' => '1', 'c__topic' => 'C1'],
+            ['u__id' => '2', 'u__status' => 'admin', 'a__id' => '2', 'a__topic' => 'A2', 'c__id' => '2', 'c__topic' => 'C2'],
+        ];
+
+        $hydrator = new LegacyHydrateRowDataArrayHydrator($this->entityManager);
+        $rows     = iterator_to_array($hydrator->toIterable($this->createResultMock($resultSet), $this->createUserArticleCommentResultSetMapping()), false);
+
+        self::assertSame([
+            ['id' => 1, 'status' => 'developer', 'articles' => [['id' => 1, 'topic' => 'A1', 'comments' => [['id' => 1, 'topic' => 'C1']]]]],
+            ['id' => 2, 'status' => 'admin', 'articles' => [['id' => 2, 'topic' => 'A2', 'comments' => [['id' => 2, 'topic' => 'C2']]]]],
+        ], $rows);
+        self::assertCount(2, $hydrator->resultsAfterRow);
+    }
+
+    /**
+     * SELECT PARTIAL u.{id, status}, PARTIAL a.{id, topic}, PARTIAL c.{id, topic}
+     *   FROM Doctrine\Tests\Models\CMS\CmsUser u
+     *   JOIN u.articles a
+     *   JOIN a.comments c
+     */
+    #[IgnoreDeprecations]
+    public function testLegacyGatherRowDataOverrideIsUsedByHydrateRow(): void
+    {
+        $this->expectDeprecationWithIdentifier('https://github.com/doctrine/orm/pull/12728');
+
+        $resultSet = [
+            ['u__id' => '1', 'u__status' => 'developer', 'a__id' => '1', 'a__topic' => 'A1', 'c__id' => '1', 'c__topic' => 'C1'],
+            ['u__id' => '1', 'u__status' => 'developer', 'a__id' => '1', 'a__topic' => 'A1', 'c__id' => '2', 'c__topic' => 'C2'],
+        ];
+
+        $hydrator = new LegacyGatherRowDataArrayHydrator($this->entityManager);
+        $result   = $hydrator->hydrateAll($this->createResultMock($resultSet), $this->createUserArticleCommentResultSetMapping());
+
+        self::assertSame([
+            [
+                'id' => 1,
+                'status' => 'DEVELOPER',
+                'articles' => [
+                    ['id' => 1, 'topic' => 'A1', 'comments' => [['id' => 1, 'topic' => 'C1'], ['id' => 2, 'topic' => 'C2']]],
+                ],
+            ],
+        ], $result);
+    }
+
+    /**
+     * SELECT PARTIAL u.{id, status}, PARTIAL a.{id, topic}, PARTIAL c.{id, topic}
+     *   FROM Doctrine\Tests\Models\CMS\CmsUser u
+     *   JOIN u.articles a
+     *   JOIN a.comments c
+     */
     public function testResultIterationWithFetchJoinHydratesEachRowOnItsOwn(): void
     {
         $resultSet = [
@@ -1396,5 +1488,47 @@ class ArrayHydratorTest extends HydrationTestCase
 
         self::assertArrayHasKey(2, $result);
         self::assertEquals(2, $result[2][$userEntityKey]['id']);
+    }
+}
+
+/**
+ * Overrides the deprecated by-reference method and inspects the result after each row.
+ */
+class LegacyHydrateRowDataArrayHydrator extends ArrayHydrator
+{
+    /** @var list<mixed[]> */
+    public array $resultsAfterRow = [];
+
+    /**
+     * @param mixed[] $row
+     * @param mixed[] $result
+     */
+    protected function hydrateRowData(array $row, array &$result): void
+    {
+        parent::hydrateRowData($row, $result);
+
+        $this->resultsAfterRow[] = $result;
+    }
+}
+
+/**
+ * Overrides the deprecated by-reference method to change the gathered data.
+ */
+class LegacyGatherRowDataArrayHydrator extends ArrayHydrator
+{
+    /**
+     * @param mixed[]               $data
+     * @param array<string, string> $id
+     * @param array<string, bool>   $nonemptyComponents
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    protected function gatherRowData(array $data, array &$id, array &$nonemptyComponents): array
+    {
+        $rowData = parent::gatherRowData($data, $id, $nonemptyComponents);
+
+        $rowData['data']['u']['status'] = strtoupper($rowData['data']['u']['status']);
+
+        return $rowData;
     }
 }

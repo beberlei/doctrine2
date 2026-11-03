@@ -56,7 +56,7 @@ class ObjectHydrator extends AbstractHydrator
 
         foreach ($this->resultSetMapping()->aliasMap as $dqlAlias => $className) {
             $this->identifierMap[$dqlAlias] = [];
-            $this->idTemplate[$dqlAlias]    = '';
+            $this->rowIdTemplate[$dqlAlias] = '';
 
             // Remember which associations are "fetch joined", so that we know where to inject
             // collection stubs or proxies and where not.
@@ -138,9 +138,7 @@ class ObjectHydrator extends AbstractHydrator
      */
     protected function hydrateAllData(): array
     {
-        while ($row = $this->statement()->fetchAssociative()) {
-            $this->hydrateRowData($row);
-        }
+        $this->hydrateAllRows();
 
         // Take snapshots from all newly initialized collections
         foreach ($this->initializedCollections as $coll) {
@@ -313,12 +311,12 @@ class ObjectHydrator extends AbstractHydrator
      *
      * @param mixed[] $row The data of the row to process.
      */
-    protected function hydrateRowData(array $row): void
+    protected function hydrateRow(array $row): void
     {
         // Split the row data into chunks of class data.
-        $rowData            = $this->gatherRowData($row);
-        $id                 = $this->rowId;
-        $nonemptyComponents = $this->nonemptyComponents;
+        $rowData            = $this->gatherRow($row);
+        $id                 = $this->gatheredRowId;
+        $nonemptyComponents = $this->gatheredNonemptyComponents;
 
         // reset result pointers for each data row
         $this->resultPointers = [];
@@ -474,9 +472,9 @@ class ObjectHydrator extends AbstractHydrator
                 // if this row has a NULL value for the root result id then make it a null result.
                 if (! isset($nonemptyComponents[$dqlAlias])) {
                     if ($this->resultSetMapping()->isMixed) {
-                        $this->result[] = [$entityKey => null];
+                        $this->hydrationResult[] = [$entityKey => null];
                     } else {
-                        $this->result[] = null;
+                        $this->hydrationResult[] = null;
                     }
 
                     $resultKey = $this->resultCounter;
@@ -499,7 +497,7 @@ class ObjectHydrator extends AbstractHydrator
                             $this->hints['collection']->hydrateSet($resultKey, $element);
                         }
 
-                        $this->result[$resultKey] = $element;
+                        $this->hydrationResult[$resultKey] = $element;
                     } else {
                         $resultKey = $this->resultCounter;
                         ++$this->resultCounter;
@@ -508,7 +506,7 @@ class ObjectHydrator extends AbstractHydrator
                             $this->hints['collection']->hydrateAdd($element);
                         }
 
-                        $this->result[] = $element;
+                        $this->hydrationResult[] = $element;
                     }
 
                     $this->identifierMap[$dqlAlias][$id[$dqlAlias]] = $resultKey;
@@ -518,7 +516,7 @@ class ObjectHydrator extends AbstractHydrator
                 } else {
                     // Update result pointer
                     $index                           = $this->identifierMap[$dqlAlias][$id[$dqlAlias]];
-                    $this->resultPointers[$dqlAlias] = $this->result[$index];
+                    $this->resultPointers[$dqlAlias] = $this->hydrationResult[$index];
                     $resultKey                       = $index;
                 }
             }
@@ -541,7 +539,7 @@ class ObjectHydrator extends AbstractHydrator
             }
 
             foreach ($rowData['scalars'] as $name => $value) {
-                $this->result[$resultKey][$name] = $value;
+                $this->hydrationResult[$resultKey][$name] = $value;
             }
         }
 
@@ -557,12 +555,12 @@ class ObjectHydrator extends AbstractHydrator
                 $obj = $newObject['obj'];
 
                 if ($scalarCount === 0 && count($rowData['newObjects']) === 1) {
-                    $this->result[$resultKey] = $obj;
+                    $this->hydrationResult[$resultKey] = $obj;
 
                     continue;
                 }
 
-                $this->result[$resultKey][$objIndex] = $obj;
+                $this->hydrationResult[$resultKey][$objIndex] = $obj;
             }
         }
     }

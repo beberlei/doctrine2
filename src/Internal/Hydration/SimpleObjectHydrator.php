@@ -56,9 +56,7 @@ class SimpleObjectHydrator extends AbstractHydrator
      */
     protected function hydrateAllData(): array
     {
-        while ($row = $this->statement()->fetchAssociative()) {
-            $this->hydrateRowData($row);
-        }
+        $this->hydrateAllRows();
 
         $this->em->getUnitOfWork()->triggerEagerLoads();
 
@@ -68,7 +66,7 @@ class SimpleObjectHydrator extends AbstractHydrator
     /**
      * {@inheritDoc}
      */
-    protected function hydrateRowData(array $row): void
+    protected function hydrateRow(array $row): void
     {
         assert($this->class !== null);
         $entityName       = $this->class->name;
@@ -175,7 +173,7 @@ class SimpleObjectHydrator extends AbstractHydrator
         $uow    = $this->em->getUnitOfWork();
         $entity = $uow->createEntity($entityName, $data, $this->hints);
 
-        $this->result[] = $entity;
+        $this->hydrationResult[] = $entity;
 
         if (isset($this->hints[Query::HINT_INTERNAL_ITERATION]) && $this->hints[Query::HINT_INTERNAL_ITERATION]) {
             $this->uow->hydrationComplete();

@@ -8,6 +8,7 @@ use BackedEnum;
 use Doctrine\DBAL\Platforms\AbstractPlatform;
 use Doctrine\DBAL\Result;
 use Doctrine\DBAL\Types\Type;
+use Doctrine\Deprecations\Deprecation;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Events;
 use Doctrine\ORM\Mapping\ClassMetadata;
@@ -18,6 +19,7 @@ use Generator;
 use LogicException;
 use ReflectionClass;
 use ReflectionEnum;
+use ReflectionMethod;
 
 use function array_key_exists;
 use function array_keys;
@@ -30,6 +32,7 @@ use function in_array;
 use function is_array;
 use function is_object;
 use function ksort;
+use function str_starts_with;
 
 /**
  * Base class for all hydrators. A hydrator is a class that provides some form
@@ -81,38 +84,51 @@ abstract class AbstractHydrator
     protected array $hints = [];
 
     /**
-     * The result that is filled by {@see hydrateRowData()}.
+     * The result that is filled by {@see hydrateRow()}.
      *
      * @var mixed[]
      */
-    protected array $result = [];
+    protected array $hydrationResult = [];
 
     /**
-     * The initial identifier hashes per DQL alias, copied for each row.
+     * The initial identifier hashes per DQL alias, copied for each row by {@see gatherRow()}.
      *
      * @var array<string, string>
      */
-    protected array $idTemplate = [];
+    protected array $rowIdTemplate = [];
 
     /**
-     * Identifier hashes per DQL alias of the row last processed by {@see gatherRowData()}.
+     * Identifier hashes per DQL alias of the row last processed by {@see gatherRow()}.
      *
      * @var array<string, string>
      */
-    protected array $rowId = [];
+    protected array $gatheredRowId = [];
 
     /**
-     * DQL aliases with at least one non NULL identifier value in the row last processed by {@see gatherRowData()}.
+     * DQL aliases with at least one non NULL identifier value in the row last processed by {@see gatherRow()}.
      *
      * @var array<string, bool>
      */
-    protected array $nonemptyComponents = [];
+    protected array $gatheredNonemptyComponents = [];
 
     /**
      * Whether the current hydration was started through {@see toIterable()},
      * so that each row is hydrated on its own.
      */
-    protected bool $iterable = false;
+    protected bool $iterating = false;
+
+    /**
+     * Per hydrator class and deprecated by-reference method, the class outside of the ORM that overrides it.
+     *
+     * @var array<class-string, array{hydrateRowData: class-string|null, gatherRowData: class-string|null, gatherScalarRowData: class-string|null}>
+     */
+    private static array $legacyOverrides = [];
+
+    private bool $legacyHydrateRowData = false;
+
+    private bool $legacyGatherRowData = false;
+
+    private bool $legacyGatherScalarRowData = false;
 
     /**
      * Initializes a new instance of a class derived from <tt>AbstractHydrator</tt>.
@@ -134,10 +150,12 @@ abstract class AbstractHydrator
      */
     final public function toIterable(Result $stmt, ResultSetMapping $resultSetMapping, array $hints = []): Generator
     {
-        $this->stmt     = $stmt;
-        $this->rsm      = $resultSetMapping;
-        $this->hints    = $hints;
-        $this->iterable = true;
+        $this->stmt      = $stmt;
+        $this->rsm       = $resultSetMapping;
+        $this->hints     = $hints;
+        $this->iterating = true;
+
+        $this->detectLegacyOverrides();
 
         $evm = $this->em->getEventManager();
 
@@ -153,9 +171,14 @@ abstract class AbstractHydrator
                     break;
                 }
 
-                $this->hydrateRowData($row);
-
-                $result = $this->takeResult();
+                if ($this->legacyHydrateRowData) {
+                    $result = [];
+                    /** @phpstan-ignore method.deprecated */
+                    $this->hydrateRowData($row, $result);
+                } else {
+                    $this->hydrateRow($row);
+                    $result = $this->takeResult();
+                }
 
                 $this->cleanupAfterRowIteration();
                 if (count($result) === 1) {
@@ -173,6 +196,49 @@ abstract class AbstractHydrator
         } finally {
             $this->cleanup();
         }
+    }
+
+    /**
+     * Detects the deprecated by-reference methods that this hydrator overrides outside of the ORM,
+     * so that they are still called during hydration.
+     */
+    private function detectLegacyOverrides(): void
+    {
+        self::$legacyOverrides[static::class] ??= [
+            'hydrateRowData' => $this->findLegacyOverride('hydrateRowData'),
+            'gatherRowData' => $this->findLegacyOverride('gatherRowData'),
+            'gatherScalarRowData' => $this->findLegacyOverride('gatherScalarRowData'),
+        ];
+
+        $overrides = self::$legacyOverrides[static::class];
+
+        $this->legacyHydrateRowData      = $overrides['hydrateRowData'] !== null;
+        $this->legacyGatherRowData       = $overrides['gatherRowData'] !== null;
+        $this->legacyGatherScalarRowData = $overrides['gatherScalarRowData'] !== null;
+
+        foreach (['hydrateRowData' => 'hydrateRow', 'gatherRowData' => 'gatherRow', 'gatherScalarRowData' => 'gatherScalarRow'] as $method => $replacement) {
+            if ($overrides[$method] === null) {
+                continue;
+            }
+
+            Deprecation::trigger(
+                'doctrine/orm',
+                'https://github.com/doctrine/orm/pull/12728',
+                'Overriding %s::%s() in %s is deprecated, override %s() instead.',
+                self::class,
+                $method,
+                $overrides[$method],
+                $replacement,
+            );
+        }
+    }
+
+    /** @return class-string|null The class outside of the ORM that overrides the method. */
+    private function findLegacyOverride(string $method): string|null
+    {
+        $declaringClass = (new ReflectionMethod($this, $method))->getDeclaringClass()->name;
+
+        return str_starts_with($declaringClass, __NAMESPACE__ . '\\') ? null : $declaringClass;
     }
 
     final protected function statement(): Result
@@ -203,6 +269,8 @@ abstract class AbstractHydrator
         $this->stmt  = $stmt;
         $this->rsm   = $resultSetMapping;
         $this->hints = $hints;
+
+        $this->detectLegacyOverrides();
 
         $this->em->getEventManager()->addEventListener([Events::onClear], $this);
         $this->prepare();
@@ -240,15 +308,15 @@ abstract class AbstractHydrator
     {
         $this->statement()->free();
 
-        $this->stmt               = null;
-        $this->rsm                = null;
-        $this->cache              = [];
-        $this->metadataCache      = [];
-        $this->result             = [];
-        $this->idTemplate         = [];
-        $this->rowId              = [];
-        $this->nonemptyComponents = [];
-        $this->iterable           = false;
+        $this->stmt                       = null;
+        $this->rsm                        = null;
+        $this->cache                      = [];
+        $this->metadataCache              = [];
+        $this->hydrationResult            = [];
+        $this->rowIdTemplate              = [];
+        $this->gatheredRowId              = [];
+        $this->gatheredNonemptyComponents = [];
+        $this->iterating                  = false;
 
         $this
             ->em
@@ -261,7 +329,7 @@ abstract class AbstractHydrator
     }
 
     /**
-     * Hydrates a single row from the current statement instance into {@see $result}.
+     * Hydrates a single row from the current statement instance into {@see $hydrationResult}.
      *
      * Template method.
      *
@@ -269,9 +337,61 @@ abstract class AbstractHydrator
      *
      * @throws HydrationException
      */
-    protected function hydrateRowData(array $row): void
+    protected function hydrateRow(array $row): void
     {
-        throw new HydrationException('hydrateRowData() not implemented by this hydrator.');
+        throw new HydrationException('hydrateRow() not implemented by this hydrator.');
+    }
+
+    /**
+     * Hydrates a single row from the current statement instance.
+     *
+     * @deprecated Override and call {@see hydrateRow()} instead, which fills {@see $hydrationResult}.
+     *
+     * @param mixed[] $row    The row data.
+     * @param mixed[] $result The result to fill.
+     *
+     * @throws HydrationException
+     */
+    protected function hydrateRowData(array $row, array &$result): void
+    {
+        $this->hydrationResult = $result;
+        $result                = [];
+
+        try {
+            $this->hydrateRow($row);
+        } finally {
+            $result                = $this->hydrationResult;
+            $this->hydrationResult = [];
+        }
+    }
+
+    /**
+     * Hydrates all remaining rows of the current statement instance into {@see $hydrationResult}.
+     *
+     * Calls {@see hydrateRowData()} instead of {@see hydrateRow()} for hydrators that still
+     * override the deprecated method.
+     */
+    final protected function hydrateAllRows(): void
+    {
+        $stmt = $this->statement();
+
+        if (! $this->legacyHydrateRowData) {
+            while ($row = $stmt->fetchAssociative()) {
+                $this->hydrateRow($row);
+            }
+
+            return;
+        }
+
+        $result                = $this->hydrationResult;
+        $this->hydrationResult = [];
+
+        while ($row = $stmt->fetchAssociative()) {
+            /** @phpstan-ignore method.deprecated */
+            $this->hydrateRowData($row, $result);
+        }
+
+        $this->hydrationResult = $result;
     }
 
     /**
@@ -280,14 +400,14 @@ abstract class AbstractHydrator
     abstract protected function hydrateAllData(): mixed;
 
     /**
-     * Returns the hydrated {@see $result} and resets it, without keeping a second reference to it.
+     * Returns the hydrated {@see $hydrationResult} and resets it, without keeping a second reference to it.
      *
      * @return mixed[]
      */
     protected function takeResult(): array
     {
-        $result       = $this->result;
-        $this->result = [];
+        $result                = $this->hydrationResult;
+        $this->hydrationResult = [];
 
         return $result;
     }
@@ -301,8 +421,8 @@ abstract class AbstractHydrator
      * field names during this procedure as well as any necessary conversions on
      * the values applied. Scalar values are kept in a specific key 'scalars'.
      *
-     * The identifier hashes (Dql-Alias => ID-Hash) are stored in {@see $rowId}, and
-     * the DQL aliases with at least one non NULL identifier value in {@see $nonemptyComponents}.
+     * The identifier hashes (Dql-Alias => ID-Hash) are stored in {@see $gatheredRowId}, and
+     * the DQL aliases with at least one non NULL identifier value in {@see $gatheredNonemptyComponents}.
      *
      * @param mixed[] $data SQL Result Row.
      *
@@ -320,10 +440,79 @@ abstract class AbstractHydrator
      *                   scalars?: array
      *               }
      */
-    protected function gatherRowData(array $data): array
+    protected function gatherRow(array $data): array
+    {
+        if (! $this->legacyGatherRowData) {
+            return $this->doGatherRow($data);
+        }
+
+        $id                 = $this->rowIdTemplate;
+        $nonemptyComponents = [];
+        /** @phpstan-ignore method.deprecated */
+        $rowData = $this->gatherRowData($data, $id, $nonemptyComponents);
+
+        $this->gatheredRowId              = $id;
+        $this->gatheredNonemptyComponents = $nonemptyComponents;
+
+        return $rowData;
+    }
+
+    /**
+     * Processes a row of the result set.
+     *
+     * @deprecated Override and call {@see gatherRow()} instead, which stores the identifier hashes
+     *             in {@see $gatheredRowId} and the non-empty DQL aliases in {@see $gatheredNonemptyComponents}.
+     *
+     * @param mixed[] $data SQL Result Row.
+     * @phpstan-param array<string, string> $id                 Dql-Alias => ID-Hash.
+     * @phpstan-param array<string, bool>   $nonemptyComponents Does this DQL-Alias has at least one non NULL value?
+     *
+     * @return array<string, array<string, mixed>>
+     * @phpstan-return array{
+     *                   data: array<array-key, array>,
+     *                   newObjects?: array<array-key, array{
+     *                       class: ReflectionClass,
+     *                       args: array,
+     *                       obj: object
+     *                   }>,
+     *                   scalars?: array
+     *               }
+     */
+    protected function gatherRowData(array $data, array &$id, array &$nonemptyComponents): array
+    {
+        $rowIdTemplate       = $this->rowIdTemplate;
+        $this->rowIdTemplate = $id;
+
+        try {
+            $rowData = $this->doGatherRow($data);
+        } finally {
+            $this->rowIdTemplate = $rowIdTemplate;
+        }
+
+        $id                 = $this->gatheredRowId;
+        $nonemptyComponents = $this->gatheredNonemptyComponents + $nonemptyComponents;
+
+        return $rowData;
+    }
+
+    /**
+     * @param mixed[] $data SQL Result Row.
+     *
+     * @return array<string, array<string, mixed>>
+     * @phpstan-return array{
+     *                   data: array<array-key, array>,
+     *                   newObjects?: array<array-key, array{
+     *                       class: ReflectionClass,
+     *                       args: array,
+     *                       obj: object
+     *                   }>,
+     *                   scalars?: array
+     *               }
+     */
+    private function doGatherRow(array $data): array
     {
         $rowData            = ['data' => [], 'newObjects' => []];
-        $id                 = $this->idTemplate;
+        $id                 = $this->rowIdTemplate;
         $nonemptyComponents = [];
 
         foreach ($this->rsm->newObjectMappings as $mapping) {
@@ -439,8 +628,8 @@ abstract class AbstractHydrator
             $rowData['newObjects'][$objIndex]['obj'] = $obj;
         }
 
-        $this->rowId              = $id;
-        $this->nonemptyComponents = $nonemptyComponents;
+        $this->gatheredRowId              = $id;
+        $this->gatheredNonemptyComponents = $nonemptyComponents;
 
         return $rowData;
     }
@@ -465,7 +654,40 @@ abstract class AbstractHydrator
      * @return mixed[] The processed row.
      * @phpstan-return array<string, mixed>
      */
-    protected function gatherScalarRowData(array $data): array
+    protected function gatherScalarRow(array $data): array
+    {
+        if ($this->legacyGatherScalarRowData) {
+            /** @phpstan-ignore method.deprecated */
+            return $this->gatherScalarRowData($data);
+        }
+
+        return $this->doGatherScalarRow($data);
+    }
+
+    /**
+     * Processes a row of the result set.
+     *
+     * @deprecated Override and call {@see gatherScalarRow()} instead.
+     *
+     * @param mixed[] $data
+     * @phpstan-param array<string, mixed> $data
+     *
+     * @return mixed[] The processed row.
+     * @phpstan-return array<string, mixed>
+     */
+    protected function gatherScalarRowData(array &$data): array
+    {
+        return $this->doGatherScalarRow($data);
+    }
+
+    /**
+     * @param mixed[] $data
+     * @phpstan-param array<string, mixed> $data
+     *
+     * @return mixed[] The processed row.
+     * @phpstan-return array<string, mixed>
+     */
+    private function doGatherScalarRow(array $data): array
     {
         $rowData = [];
 
